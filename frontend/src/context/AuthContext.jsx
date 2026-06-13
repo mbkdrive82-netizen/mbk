@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { fetchWithTimeout } from '@/utils/fetchWithTimeout';
 import authService, { studentAuthService, companyAuthService, setAuthCookie, clearAuthCookie, markPortalLoginSession, clearClientAuthSession } from '../services/authService';
 import { discoverApiOrigin, getResolvedApiOrigin } from '@/config/apiConfig';
 import { loginTypeMatchesUser, normalizeAuthUser, isKnownPortalRole } from '@/utils/authRoles';
@@ -440,14 +441,16 @@ export const AuthProvider = ({ children }) => {
           requestBody.expectedRole = roleForRequest;
         }
 
-        const response = await withTimeout(
-          fetch(`${cleanBaseUrl}/api/auth/login`, {
+        const response = await fetchWithTimeout(
+          `${cleanBaseUrl}/api/auth/login`,
+          {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify(requestBody),
-          })
+          },
+          10000 // 10‑second timeout
         );
 
         const data = await response.json();

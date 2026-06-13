@@ -22,7 +22,7 @@ import {
     UserCircleIcon,
     CalendarIcon as Calendar,
     MapPinIcon,
-    MessageSquare as ChatBubbleLeftRightIcon,
+    ChatBubbleLeftRightIcon,
     Cog6ToothIcon,
     ArrowRightOnRectangleIcon
 } from '@heroicons/react/24/outline';
