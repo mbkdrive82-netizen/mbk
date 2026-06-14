@@ -65,14 +65,11 @@ export const roleLinks = {
 
   Trainer: [
     { label: "Dashboard",                  href: "/trainer/dashboard",             icon: Home },
-
     { label: "Attendance Upload",          href: "/trainer/attendance",            icon: ClipboardList },
     { label: "Student Activities",         href: "/trainer/student-activities",    icon: Image },
     { label: "Student Attendance Records", href: "/trainer/student-attendance",    icon: FileText },
-    { label: "Schedule",                   href: "/trainer/schedule",              icon: CalendarClock },
-    { label: "Profile",                    href: "/trainer/profile",               icon: UserCog },
-    { label: "Pay Slips",                  href: "/trainer/payslips",              icon: Receipt },
-    { label: "Complaints",                 href: "/trainer/complaints",            icon: MessageSquareMore },
+    { label: "Reports",                    href: "/trainer/reports",               icon: BarChart3 },
+    { label: "Profile Settings",           href: "/trainer/settings",              icon: Settings },
   ],
 
   Accountant: [

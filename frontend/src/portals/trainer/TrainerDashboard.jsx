@@ -26,6 +26,7 @@ import PortalUserAvatar, {
 } from "@/components/common/PortalUserAvatar";
 
 import useTrainerDashboardData from "./dashboard/useTrainerDashboardData";
+import { getTrainerDashboardAnalytics } from "@/services/trainerPortalService";
 
 const scheduleDeferredMount = (callback, delayMs = 0) => {
   if (typeof window === "undefined") {
@@ -139,6 +140,8 @@ function TrainerDashboard() {
     upcomingSchedules,
   } = useTrainerDashboardData(currentUser);
 
+  const [portalAnalytics, setPortalAnalytics] = useState(null);
+
   const trainer = profileData || currentUser || {};
   const hydratedTrainer = hasMounted ? trainer : null;
   const trainerName = getPortalUserDisplayName(hydratedTrainer || {});
@@ -160,6 +163,14 @@ function TrainerDashboard() {
   useEffect(() => {
     setHasMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (!hasMounted) return undefined;
+    getTrainerDashboardAnalytics()
+      .then((res) => setPortalAnalytics(res?.data || res))
+      .catch(() => setPortalAnalytics(null));
+    return undefined;
+  }, [hasMounted]);
 
   useEffect(() => {
     const cancelSchedulesMount = scheduleDeferredMount(() => {
@@ -310,6 +321,42 @@ function TrainerDashboard() {
           </div>
         ))}
       </section>
+
+      {portalAnalytics ? (
+        <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+          <h2 className="text-lg font-bold text-slate-950">Today&apos;s Attendance Overview</h2>
+          {!portalAnalytics.hasAssignment ? (
+            <p className="mt-3 text-sm text-amber-700">
+              {portalAnalytics.assignmentMessage || "No college has been assigned by Admin."}
+            </p>
+          ) : (
+            <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {[
+                { label: "Assigned College", value: portalAnalytics.assignedCollege || "—" },
+                { label: "Present", value: portalAnalytics.presentStudents ?? 0 },
+                { label: "Absent", value: portalAnalytics.absentStudents ?? 0 },
+                { label: "Attendance %", value: `${portalAnalytics.attendancePercentage ?? 0}%` },
+                { label: "Activities", value: portalAnalytics.todaysActivities ?? 0 },
+                {
+                  label: "Clock-In",
+                  value: portalAnalytics.clockInStatus?.checkedIn ? "Done" : "Pending",
+                },
+                {
+                  label: "Clock-Out",
+                  value: portalAnalytics.clockOutStatus?.checkedOut ? "Done" : "Pending",
+                },
+              ].map((item) => (
+                <div key={item.label} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {item.label}
+                  </p>
+                  <p className="mt-1 text-lg font-bold text-slate-900">{item.value}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      ) : null}
 
       {showNotificationsSection ? (
         <TrainerDashboardNotificationsSection currentUserRole={currentUser?.role} />

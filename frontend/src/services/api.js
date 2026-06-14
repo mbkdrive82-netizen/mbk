@@ -7,6 +7,10 @@ import {
   resetDiscoveredApiOrigin,
 } from "@/config/apiConfig";
 import { isValidAuthToken } from "@/utils/authJwt";
+import {
+  AUTH_ERROR_MESSAGES,
+  resolveAuthErrorMessage,
+} from "@/lib/authErrorHandler";
 
 const cleanBaseUrl = getApiOrigin();
 const hasExplicitOrigin = Boolean(
@@ -359,6 +363,7 @@ const getStoredAccessToken = () => {
  */
 export const API = axios.create({
   baseURL: cleanBaseUrl ? `${cleanBaseUrl}/api` : "/api",
+  timeout: DEFAULT_REQUEST_TIMEOUT_MS,
 });
 
 API.interceptors.request.use((config) => {
@@ -394,6 +399,15 @@ API.interceptors.response.use(
       durationMs: nowMs() - Number(config?.__startedAt || nowMs()),
       ok: false,
     });
+
+    const normalizedMessage = resolveAuthErrorMessage(error);
+    if (normalizedMessage && error?.message !== normalizedMessage) {
+      error.message = normalizedMessage;
+    }
+    if (error?.code === "ECONNABORTED" || /timeout/i.test(error?.message || "")) {
+      error.message = AUTH_ERROR_MESSAGES.CONNECTION_TIMEOUT;
+    }
+
     return Promise.reject(error);
   },
 );
@@ -640,9 +654,7 @@ const fetchWithAuth = async (endpoint, options = {}) => {
           durationMs,
           ok: false,
         });
-        const timeoutError = new Error(
-          `Request timeout after ${Math.round(timeoutMs)}ms for ${method} ${endpoint}`,
-        );
+        const timeoutError = new Error(AUTH_ERROR_MESSAGES.CONNECTION_TIMEOUT);
         timeoutError.code = "ETIMEDOUT";
         timeoutError.status = 0;
         timeoutError.__metricCaptured = true;
@@ -712,9 +724,9 @@ const fetchWithAuth = async (endpoint, options = {}) => {
           durationMs,
           ok: false,
         });
-        const networkError = new Error(
-          `Network Error to ${url}: ${detail}. Check internet connection, CORS, or if server is down.`,
-        );
+        const networkError = new Error(resolveAuthErrorMessage(fetchError, AUTH_ERROR_MESSAGES.NETWORK_ERROR));
+        networkError.code = fetchError.code || "ERR_NETWORK";
+        networkError.status = 0;
         networkError.__metricCaptured = true;
         throw networkError;
       }

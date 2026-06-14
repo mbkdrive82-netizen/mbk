@@ -1,15 +1,32 @@
 import bundleAnalyzer from '@next/bundle-analyzer';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const readRootEnvValue = (key) => {
+  try {
+    const envPath = path.resolve(__dirname, '../.env');
+    const content = fs.readFileSync(envPath, 'utf8');
+    const match = content.match(new RegExp(`^${key}=(.+)$`, 'm'));
+    return match?.[1]?.trim().replace(/^["']|["']$/g, '') || '';
+  } catch {
+    return '';
+  }
+};
+
+const rootBackendPort = readRootEnvValue('BACKEND_PORT') || readRootEnvValue('PORT') || '5006';
+
 const withBundleAnalyzer = bundleAnalyzer({
   enabled: process.env.ANALYZE === 'true',
 });
 
-const defaultLocalApiUrl = process.env.NEXT_PUBLIC_API_URL || process.env.API_ORIGIN || "http://localhost:5005";
+const defaultLocalApiUrl =
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.API_ORIGIN ||
+  `http://localhost:${rootBackendPort}`;
 const rawBaseUrl = (process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_BASE_URL || process.env.API_ORIGIN || "").trim();
 const cleanBaseUrl = rawBaseUrl ? rawBaseUrl.replace(/\/+$/, "").replace(/\/api\/?$/i, "") : "";
 const devApiOrigin = cleanBaseUrl || defaultLocalApiUrl.replace(/\/api\/?$/i, "");

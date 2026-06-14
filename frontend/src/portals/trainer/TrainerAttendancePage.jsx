@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { memo } from "react";
 import { ClipboardList } from "lucide-react";
+import TrainerCollegeGuard from "@/components/trainer/TrainerCollegeGuard";
 
 /* ── lazy-load the existing attendance upload section ──────── */
 const AttendanceUploadSection = dynamic(
@@ -51,7 +52,9 @@ function TrainerAttendancePage() {
       </section>
 
       {/* ── attendance upload form ───────────────────────────── */}
-      <AttendanceUploadSection />
+      <TrainerCollegeGuard>
+        <AttendanceUploadSection />
+      </TrainerCollegeGuard>
 
       {/* ── attendance history ───────────────────────────────── */}
       <TrainerAttendanceHistory />

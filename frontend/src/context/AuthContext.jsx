@@ -2,11 +2,12 @@
 
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import authService, { studentAuthService, companyAuthService, setAuthCookie, clearAuthCookie, markPortalLoginSession, clearClientAuthSession } from '../services/authService';
-import { discoverApiOrigin, getResolvedApiOrigin } from '@/config/apiConfig';
+import { discoverApiOrigin } from '@/config/apiConfig';
 import { loginTypeMatchesUser, normalizeAuthUser, isKnownPortalRole } from '@/utils/authRoles';
 import { validateLoginForm } from '@/utils/authValidation';
 import { getUnauthenticatedLoginPath } from '@/utils/authRedirects';
 import { isPublicPath } from '@/shared/config/routeProtection';
+import { AUTH_ERROR_MESSAGES, resolveAuthErrorMessage, parseApiJsonResponse } from '@/lib/authErrorHandler';
 
 const AuthContext = createContext();
 
@@ -228,8 +229,9 @@ export const AuthProvider = ({ children }) => {
       }
       return response;
     } catch (err) {
-      setError('Login failed. Please try again.');
-      return { success: false, message: 'Login failed. Please try again.' };
+      const message = resolveAuthErrorMessage(err, AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
+      setError(message);
+      return { success: false, message };
     }
   };
 
@@ -286,8 +288,9 @@ export const AuthProvider = ({ children }) => {
       }
       return response;
     } catch (err) {
-      setError('Login failed. Please try again.');
-      return { success: false, message: 'Login failed. Please try again.' };
+      const message = resolveAuthErrorMessage(err, AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
+      setError(message);
+      return { success: false, message };
     }
   };
 
@@ -427,9 +430,18 @@ export const AuthProvider = ({ children }) => {
       return null;
     };
 
+    const resolveLoginApiUrl = async () => {
+      // In the browser, use the Next.js /api rewrite to avoid port/CORS mismatches.
+      if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+        return '/api/auth/login';
+      }
+      const origin = await discoverApiOrigin();
+      return `${origin}/api/auth/login`;
+    };
+
     const tryGeneralUser = async (strict = false, roleOverride = null) => {
       try {
-        const cleanBaseUrl = await discoverApiOrigin();
+        const loginUrl = await resolveLoginApiUrl();
         const requestBody = { email: trimmedEmail, password: trimmedPassword };
         const roleForRequest = roleOverride || expectedRole;
         if (
@@ -441,7 +453,7 @@ export const AuthProvider = ({ children }) => {
         }
 
         const response = await withTimeout(
-          fetch(`${cleanBaseUrl}/api/auth/login`, {
+          fetch(loginUrl, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -450,7 +462,7 @@ export const AuthProvider = ({ children }) => {
           })
         );
 
-        const data = await response.json();
+        const data = await parseApiJsonResponse(response);
         const payload = data.data || data;
         const accessToken = payload.accessToken || data.accessToken;
         const authUser = payload.user || data.user;
@@ -574,13 +586,9 @@ export const AuthProvider = ({ children }) => {
 
       throw new Error('Invalid email or password');
     } catch (err) {
-      const message = err.message?.includes('timed out')
-        ? err.message
-        : err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError')
-          ? 'Network error. Please check your internet connection.'
-          : err.message || 'Login failed. Please try again.';
+      const message = resolveAuthErrorMessage(err, AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS);
       setError(message);
-      throw err;
+      throw Object.assign(err instanceof Error ? err : new Error(message), { message });
     }
   };
 

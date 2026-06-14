@@ -1,5 +1,11 @@
 import { api } from "@/services/api";
 import {
+  AUTH_ERROR_MESSAGES,
+  normalizeAuthResponseError,
+  resolveAuthErrorMessage,
+  parseApiJsonResponse,
+} from "@/lib/authErrorHandler";
+import {
   discoverApiOrigin,
   getApiOrigin,
   getResolvedApiOrigin,
@@ -33,6 +39,9 @@ export const registerCompany = (data) =>
 export const verifyOtp = (data) =>
   api.post("/auth/register/trainer/verify-otp", data);
 
+export const resendTrainerOtp = (data) =>
+  api.post("/auth/register/trainer/resend-otp", data);
+
 /**
  * Legacy Registration Step 1
  */
@@ -49,6 +58,12 @@ export const signupTrainer = (data) => api.post("/auth/signup", data);
 let API_BASE_URL = getSimpleAuthBaseUrl();
 
 const resolveSimpleAuthBaseUrl = async () => {
+  // Browser dev: always use Next.js rewrite to avoid port/CORS mismatches.
+  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+    API_BASE_URL = '/api/simple-auth';
+    return API_BASE_URL;
+  }
+
   const hasExplicitOrigin = Boolean(
     (process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_BASE_URL || process.env.API_ORIGIN || '').trim(),
   );
@@ -206,6 +221,9 @@ const purgeInvalidStoredToken = () => {
   return null;
 };
 
+const SIMPLE_AUTH_TIMEOUT_MS = Number(process.env.NEXT_PUBLIC_API_TIMEOUT_MS || 20000);
+const SIMPLE_AUTH_MAX_RETRIES = 1;
+
 const makeRequest = async (url, method = 'GET', data = null, attempt = 0) => {
   const headers = {
     'Content-Type': 'application/json',
@@ -230,9 +248,27 @@ const makeRequest = async (url, method = 'GET', data = null, attempt = 0) => {
     ? url
     : `${baseUrl}${url.startsWith('/') ? url : `/${url}`}`;
 
+  const controller = typeof AbortController !== 'undefined'
+    ? new AbortController()
+    : null;
+  const timeoutHandle = controller
+    ? setTimeout(() => controller.abort('timeout'), SIMPLE_AUTH_TIMEOUT_MS)
+    : null;
+  if (controller) {
+    config.signal = controller.signal;
+  }
+
   try {
     const response = await fetch(requestUrl, config);
-    const result = await response.json();
+    let result = {};
+    try {
+      result = await parseApiJsonResponse(response);
+    } catch (parseError) {
+      if (parseError?.status >= 500 || parseError?.nonJsonBody) {
+        throw parseError;
+      }
+      result = {};
+    }
 
     if (response.status === 401) {
       removeToken();
@@ -241,21 +277,40 @@ const makeRequest = async (url, method = 'GET', data = null, attempt = 0) => {
       }
     }
 
-    return {
+    const normalized = {
       success: response.ok,
       status: response.status,
       ...result,
     };
-  } catch (error) {
-    if (attempt === 0) {
-      resetDiscoveredApiOrigin();
-      return makeRequest(url, method, data, 1);
+
+    if (!response.ok) {
+      normalized.message = resolveAuthErrorMessage(
+        { status: response.status, message: result?.message, response: { data: result } },
+        result?.message || AUTH_ERROR_MESSAGES.INVALID_CREDENTIALS,
+      );
     }
+
+    return normalized;
+  } catch (error) {
+    const isTimeout =
+      error?.name === 'AbortError' &&
+      String(error?.message || controller?.signal?.reason || '').includes('timeout');
+
+    if (attempt < SIMPLE_AUTH_MAX_RETRIES) {
+      resetDiscoveredApiOrigin();
+      return makeRequest(url, method, data, attempt + 1);
+    }
+
     return {
       success: false,
-      message: 'Network error. Please check your connection and ensure the backend is running.',
+      status: isTimeout ? 408 : 0,
+      message: isTimeout
+        ? AUTH_ERROR_MESSAGES.CONNECTION_TIMEOUT
+        : resolveAuthErrorMessage(error, AUTH_ERROR_MESSAGES.NETWORK_ERROR),
       error: error.message,
     };
+  } finally {
+    if (timeoutHandle) clearTimeout(timeoutHandle);
   }
 };
 

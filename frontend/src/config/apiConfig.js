@@ -3,7 +3,7 @@
  * All frontend HTTP clients should import from here — never hardcode ports.
  */
 
-const DEFAULT_DEV_API_ORIGIN = 'http://localhost:5005';
+const DEFAULT_DEV_API_ORIGIN = 'http://localhost:5006';
 
 const rawApiUrl = (
   process.env.NEXT_PUBLIC_API_URL ||
@@ -34,7 +34,7 @@ export const getSocketOrigin = () => {
 };
 
 /** Local dev ports to try when the configured backend port is unreachable */
-export const LOCAL_API_PORT_FALLBACKS = [5005, 5003, 5004, 5006, 5007, 5008, 5001, 5000];
+export const LOCAL_API_PORT_FALLBACKS = [5006, 5005, 5003, 5004, 5007, 5008, 5001, 5000];
 
 let discoveredOrigin = null;
 
