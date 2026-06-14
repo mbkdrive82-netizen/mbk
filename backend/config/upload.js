@@ -93,7 +93,7 @@ const multiStorage = multer.diskStorage({
         else if (file.fieldname === 'signature') dir = signatureDir;
         else if (file.fieldname === 'activityPhotos') dir = photoDir;
         else if (file.fieldname === 'activityVideos') dir = videoDir;
-        else if (file.fieldname === 'checkOutGeoImage' || file.fieldname === 'photo') dir = imageDir;
+        else if (file.fieldname === 'checkOutGeoImage' || file.fieldname === 'photo' || file.fieldname === 'check_in_image' || file.fieldname === 'check_out_image') dir = imageDir;
         else if (file.fieldname === 'checkOutSignature') dir = signatureDir;
         cb(null, dir);
     },
@@ -187,7 +187,9 @@ const uploadAttendance = multer({
     { name: 'checkOutGeoImage', maxCount: 10 },
     { name: 'activityPhotos', maxCount: 10 },
     { name: 'activityVideos', maxCount: 10 },
-    { name: 'checkOutSignature', maxCount: 1 }
+    { name: 'checkOutSignature', maxCount: 1 },
+    { name: 'check_in_image', maxCount: 1 },
+    { name: 'check_out_image', maxCount: 1 }
 ]);
 
 // Upload middleware for manual attendance (optional image)

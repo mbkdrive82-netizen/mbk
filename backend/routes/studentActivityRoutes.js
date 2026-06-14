@@ -4,7 +4,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { authenticate } = require('../middleware/auth');
-const { StudentActivity } = require('../models');
+const { StudentActivity, Attendance } = require('../models');
 
 // Ensure imageDir exists
 const imageDir = './uploads/attendance/images';
@@ -22,12 +22,9 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ storage });
-const uploadAttendanceFields = upload.fields([
-  { name: 'check_in_image', maxCount: 1 },
-  { name: 'check_out_image', maxCount: 1 }
-]);
-const uploadSingleImage = upload.single('image');
+const { uploadAttendance } = require('../config/upload');
+const uploadMiddle = uploadAttendance;
+const uploadSingleImage = multer({ storage }).single('image');
 
 // Fetch student activities & attendance submissions
 router.get('/', authenticate, async (req, res) => {
@@ -46,78 +43,56 @@ router.get('/', authenticate, async (req, res) => {
 });
 
 // Attendance submission with geo-tagged check-in and optional check-out image
-router.post('/attendance/submit', authenticate, uploadAttendanceFields, async (req, res) => {
+router.post('/attendance/submit', authenticate, uploadMiddle, async (req, res) => {
   try {
     const { trainer_id, attendance_date, status } = req.body;
+    // Parse optional location if provided
     let location = req.body.location;
     if (typeof location === 'string') {
-      try {
-        location = JSON.parse(location);
-      } catch (e) {
-        // ignore
-      }
+      try { location = JSON.parse(location); } catch (e) { }
     }
     const { latitude, longitude, accuracy } = location || {};
-
+    // Validate required fields
     if (!trainer_id || !attendance_date || !status) {
       return res.status(400).json({ success: false, message: 'Missing required fields' });
     }
+    // Process uploaded files
+    const excelFile = req.files && req.files['attendanceExcel'] ? req.files['attendanceExcel'][0] : null;
+    const photoFile = req.files && req.files['studentsPhoto'] ? req.files['studentsPhoto'][0] : null;
+    const pdfFile = req.files && req.files['attendancePdf'] ? req.files['attendancePdf'][0] : null;
 
-    const checkInFile = req.files && req.files['check_in_image'] ? req.files['check_in_image'][0] : null;
-    const checkOutFile = req.files && req.files['check_out_image'] ? req.files['check_out_image'][0] : null;
+    let attendanceExcelUrl = null;
+    let studentsPhotoUrl = null;
+    let attendancePdfUrl = null;
 
-    if (!checkInFile) {
-      return res.status(400).json({ success: false, message: 'Check-in geo-tagged image required' });
+    if (excelFile) {
+      attendanceExcelUrl = `/uploads/attendance/excels/${excelFile.filename}`;
+    }
+    if (photoFile) {
+      studentsPhotoUrl = `/uploads/attendance/photos/${photoFile.filename}`;
+    }
+    if (pdfFile) {
+      attendancePdfUrl = `/uploads/attendance/pdfs/${pdfFile.filename}`;
     }
 
-    if (status === 'present' && !checkOutFile) {
-      return res.status(400).json({ success: false, message: 'Check-out geo-tagged image required for Present status' });
-    }
-
-    if (typeof latitude !== 'number' || typeof longitude !== 'number') {
-      return res.status(400).json({ success: false, message: 'Invalid location data' });
-    }
-
-    // Create check-in record
-    const checkInActivity = await StudentActivity.create({
-      photoUrl: `/uploads/attendance/images/${checkInFile.filename}`,
-      classId: 'check-in',
-      className: 'Trainer Check-In',
+    // Create Attendance record
+    const attendanceRecord = await Attendance.create({
       trainerId: trainer_id,
       trainerName: req.user.name || 'Unknown',
+      attendanceDate: attendance_date,
+      status,
+      date: new Date(attendance_date || Date.now()),
+      attendanceExcelUrl,
+      studentsPhotoUrl,
+      attendancePdfUrl,
+      scannedAttendancePdfUrl: attendancePdfUrl,
       uploadedAt: new Date(),
       latitude,
       longitude,
       accuracy,
-      address: null,
     });
 
-    let checkOutActivity = null;
-    if (status === 'present' && checkOutFile) {
-      checkOutActivity = await StudentActivity.create({
-        photoUrl: `/uploads/attendance/images/${checkOutFile.filename}`,
-        classId: 'check-out',
-        className: 'Trainer Check-Out',
-        trainerId: trainer_id,
-        trainerName: req.user.name || 'Unknown',
-        uploadedAt: new Date(),
-        latitude,
-        longitude,
-        accuracy,
-        address: null,
-      });
-    }
-
-    return res.json({
-      success: true,
-      check_in_id: checkInActivity._id,
-      check_out_id: checkOutActivity ? checkOutActivity._id : null,
-      status: 'verified',
-      geo_verification: {
-        check_in: 'verified',
-        check_out: status === 'present' ? 'verified' : 'skipped'
-      }
-    });
+    return res.json({ success: true, attendanceId: attendanceRecord._id });
   } catch (err) {
     console.error('Attendance submit error:', err);
     return res.status(500).json({ success: false, message: 'Server error' });

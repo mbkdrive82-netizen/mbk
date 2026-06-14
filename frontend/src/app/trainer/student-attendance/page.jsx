@@ -1,32 +1,8 @@
 "use client";
 
-<<<<<<< HEAD
-import dynamic from "next/dynamic";
-import { memo } from "react";
-
-const TrainerStudentAttendanceRecords = dynamic(
-  () => import("@/portals/trainer/TrainerStudentAttendanceRecords"),
-  {
-    loading: () => (
-      <div className="h-64 animate-pulse rounded-2xl bg-slate-100" />
-    ),
-    ssr: false,
-  },
-);
-
-function TrainerStudentAttendancePage() {
-  return (
-    <div className="mx-auto max-w-7xl px-3 sm:px-6 lg:px-8">
-      <TrainerStudentAttendanceRecords />
-    </div>
-  );
-}
-
-export default memo(TrainerStudentAttendancePage);
-=======
 import React, { useState, useEffect, useCallback } from 'react';
 import MainLayout from '@/app/layouts/MainLayout';
-import FileUploadCard from './components/FileUploadCard';
+import FileUploadCard from '@/app/trainer/student-attendance/components/FileUploadCard';
 import { api } from '@/services/api';
 import { toast } from 'react-hot-toast';
 import { useAuth } from '@/context/AuthContext';
@@ -259,4 +235,3 @@ export default function StudentAttendancePage() {
     </MainLayout>
   );
 }
->>>>>>> e59dd866f287c2b2434d023fd839fb00cb3ef9b3
