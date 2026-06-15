@@ -75,7 +75,6 @@ router.post("/", authenticate, async (req, res) => {
     const otpRecord = await Otp.findOne({
       purpose: "company_admin_verify",
       verified: true,
-      used: true,
       expiresAt: { $gt: new Date() },
       $or: [{ email: normalizedEmail }, { email }],
     });

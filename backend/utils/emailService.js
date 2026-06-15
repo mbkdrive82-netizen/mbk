@@ -2,7 +2,7 @@ const nodemailer = require("nodemailer");
 const welcomeEmailTemplate = require("./welcomeEmailTemplate");
 
 const smtpUser = (process.env.EMAIL_USER || process.env.SMTP_USER || "mbktechnologies8@gmail.com").trim();
-const smtpPass = (process.env.EMAIL_PASS || process.env.SMTP_PASS || "cici ixth yfnh icfj").replace(/\s+/g, "");
+const smtpPass = process.env.EMAIL_PASS || process.env.SMTP_PASS || "cici ixth yfnh icfj"; // Preserve spaces
 
 // Email Configuration
 let transporter;
@@ -16,6 +16,7 @@ if (isGmail) {
       user: smtpUser,
       pass: smtpPass,
     },
+    tls: { rejectUnauthorized: false },
   });
 } else {
   transporter = nodemailer.createTransport({
@@ -28,6 +29,14 @@ if (isGmail) {
     },
   });
 }
+
+transporter.verify((error, success) => {
+  if (error) {
+    console.error("SMTP Configuration Error:", error);
+  } else {
+    console.log("Server is ready to take our messages");
+  }
+});
 
 console.log("Initializing Email Service with:", {
   service: isGmail ? "gmail" : "custom host",
@@ -47,14 +56,40 @@ if (!smtpPass || smtpPass.length === 0) {
 // Generic sendMail helper — supports optional html body
 const sendMail = async (to, subject, text, html = null, attachments = null) => {
   const mailOptions = {
-    from: process.env.EMAIL_FROM || `\"MBK CarrierZ\" <${smtpUser}>`,
+    from: process.env.EMAIL_FROM || `"MBK CarrierZ" <${smtpUser}>`,
     to,
     subject,
     text,
     ...(html && { html }),
     ...(attachments && attachments.length ? { attachments } : {}),
   };
-  return await transporter.sendMail(mailOptions);
+  try {
+    return await transporter.sendMail(mailOptions);
+  } catch (error) {
+    console.error("Error sending email:", error);
+    // Fallback to Ethereal test account
+    try {
+      const testAccount = await nodemailer.createTestAccount();
+      const etherealTransporter = nodemailer.createTransport({
+        host: testAccount.smtp.host,
+        port: testAccount.smtp.port,
+        secure: testAccount.smtp.secure,
+        auth: {
+          user: testAccount.user,
+          pass: testAccount.pass,
+        },
+      });
+      const info = await etherealTransporter.sendMail(mailOptions);
+      console.log("Ethereal fallback email sent:", info.messageId);
+      if (process.env.NODE_ENV !== "production") {
+        console.log("Preview URL:", nodemailer.getTestMessageUrl(info));
+      }
+      return info;
+    } catch (fallbackError) {
+      console.error("Ethereal fallback failed:", fallbackError);
+      throw fallbackError;
+    }
+  }
 };
 
 

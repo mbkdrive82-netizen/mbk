@@ -42,14 +42,10 @@ export default function AddCompanyModal({ onClose, onSuccess }) {
     try {
       setLoading(true);
       setMsg("");
-      const res = await api.post("/companies/send-otp", { email: adminEmail });
+      await api.post("/companies/send-otp", { email: adminEmail });
       setOtpSent(true);
-      if (res?.debugOtp) {
-        setOtp(String(res.debugOtp));
-        setMsg(`OTP generated. Use this code: ${res.debugOtp}`, "success");
-      } else {
-        setMsg(`OTP sent to ${adminEmail}`, "success");
-      }
+      // Show generic success message without exposing OTP
+      setMsg(`OTP has been sent to your registered email address.`, "success");
     } catch (err) {
       setMsg(err.message || "Error sending OTP", "error");
     } finally {

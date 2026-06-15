@@ -43,74 +43,40 @@ const getStoredLogoPath = (file) => {
 // @access  Super Admin
 router.post('/send-otp', authenticate, async (req, res) => {
     try {
-        console.log('[COMPANY-OTP] Request received:', req.body);
+        console.log('[COMPANY-OTP] Request received');
         const { email } = req.body;
         if (!email) {
-            console.warn('[COMPANY-OTP] Missing email in request');
+            console.warn('[COMPANY-OTP] Missing email');
             return res.status(400).json({ message: 'Admin email is required' });
         }
-        // Email lookup (optional, e.g., verify email exists in system)
-        console.log(`[COMPANY-OTP] Looking up email: ${email}`);
+        // Normalize email
+        const normalizedEmail = email.trim().toLowerCase();
+        console.log(`[COMPANY-OTP] Generating OTP for ${normalizedEmail}`);
+        // Invalidate any previous OTPs for this email and purpose
+        await Otp.deleteMany({ email: normalizedEmail, purpose: 'company_admin_verify' });
         // Generate 6-digit OTP
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
-        console.log(`[COMPANY-OTP] Generated OTP: ${otp}`);
-        const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes from now
-        // Create new OTP entry (allow multiple OTPs for same email)
-        console.log('[COMPANY-OTP] Saving OTP to database');
-        // Hash OTP before storing
-        const crypto = require('crypto');
+        const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+        // Store hashed OTP
         const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
         await Otp.create({
-            email,
+            email: normalizedEmail,
             hashedOtp,
             purpose: 'company_admin_verify',
             expiresAt,
             verified: false
         });
-        console.log('[COMPANY-OTP] OTP saved successfully');
         // Send OTP email
-        let emailSent = false;
-        try {
-            await sendMail(
-                email,
-                '🔑 Company Admin Verification OTP — MBK CarrierZ',
-                `Your OTP for Company Admin account creation is: ${otp}\n\nThis OTP is valid for 5 minutes. Do not share it with anyone.`
-            );
-            emailSent = true;
-            console.log('[COMPANY-OTP] Email sent successfully');
-        } catch (mailError) {
-            console.error('SMTP email failed in /send-otp:', mailError.message);
-            const allowOtpDebug = process.env.NODE_ENV !== 'production' || String(process.env.ALLOW_OTP_DEBUG || '').trim() === '1';
-            if (!allowOtpDebug) {
-                throw mailError; // Re-throw if not allowed to debug
-            }
-        }
-        console.log(`[COMPANY-OTP] OTP generated for ${email}: ${otp}`);
-        // Log to local otp_debug.txt
-        const allowOtpDebug = process.env.NODE_ENV !== 'production' || String(process.env.ALLOW_OTP_DEBUG || '').trim() === '1';
-        if (allowOtpDebug) {
-            try {
-                const fs = require('fs');
-                const path = require('path');
-                const serverDebugFile = path.join(__dirname, '../otp_debug.txt');
-                const rootDebugFile = path.join(__dirname, '../../otp_debug.txt');
-                const logContent = `[${new Date().toISOString()}] Email: ${email} | OTP: ${otp} (Company Admin Verification)\n`;
-                fs.appendFileSync(serverDebugFile, logContent);
-                try {
-                    fs.appendFileSync(rootDebugFile, logContent);
-                } catch (e) {}
-            } catch (err) {
-                console.error('Failed to write local OTP debug log:', err.message);
-            }
-        }
-        res.json({
-            success: true,
-            message: emailSent ? `OTP sent to ${email}` : `OTP generated (local fallback)`,
-            ...(allowOtpDebug ? { debugOtp: otp } : {})
-        });
+        await sendMail(
+            normalizedEmail,
+            '🔑 Company Admin Verification OTP — MBK CarrierZ',
+            `Your OTP for Company Admin account creation is: ${otp}\n\nThis OTP is valid for 5 minutes.`
+        );
+        console.log('[COMPANY-OTP] OTP email sent');
+        // Generic success response without exposing OTP
+        res.json({ success: true, message: 'OTP has been sent to your registered email address.' });
     } catch (error) {
         console.error('Error sending company OTP:', error);
-        console.error(error.stack);
         res.status(500).json({ message: 'Failed to send OTP', error: error.message });
     }
 });
@@ -120,15 +86,16 @@ router.post('/send-otp', authenticate, async (req, res) => {
 // @access  Super Admin
 router.post('/verify-otp', authenticate, async (req, res) => {
     try {
-        const { email, otp } = req.body;
-        if (!email || !otp) {
+        const { email, adminEmail, otp } = req.body;
+        // Accept either 'email' or 'adminEmail' from the request
+        const emailToUse = (adminEmail || email || '').trim().toLowerCase();
+        if (!emailToUse || !otp) {
             return res.status(400).json({ success: false, message: 'Email and OTP are required' });
         }
         // Hash incoming OTP for comparison
-        const crypto = require('crypto');
         const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
-        console.log(`[COMPANY-OTP] Verifying OTP for ${email}`);
-        const record = await Otp.findOne({ email, hashedOtp, purpose: 'company_admin_verify' });
+        console.log(`[COMPANY-OTP] Verifying OTP for ${emailToUse}`);
+        const record = await Otp.findOne({ email: emailToUse, hashedOtp, purpose: 'company_admin_verify' });
         if (!record) {
             return res.status(404).json({ success: false, message: 'OTP not found or already used. Please request a new one.' });
         }
@@ -138,7 +105,7 @@ router.post('/verify-otp', authenticate, async (req, res) => {
         // Mark as verified
         record.verified = true;
         await record.save();
-        console.log(`[COMPANY-OTP] OTP verified for ${email}`);
+        console.log(`[COMPANY-OTP] OTP verified for ${emailToUse}`);
         return res.json({ success: true, message: 'OTP verified successfully' });
     } catch (error) {
         console.error('Error verifying company OTP:', error);
@@ -181,34 +148,36 @@ router.get('/:id', authenticate, async (req, res) => {
 // @access  Super Admin
 router.post('/', authenticate, upload.single('logo'), async (req, res) => {
     try {
-        const { adminName, adminEmail: email } = req.body;
+        const { adminName, adminEmail, email } = req.body;
+        const normalizedEmail = (adminEmail || email || '').trim().toLowerCase();
         const storedLogoPath = getStoredLogoPath(req.file);
 
-        console.log('Creating company invite for:', { adminName, email });
+        console.log('Creating company invite for:', { adminName, normalizedEmail });
 
-        // ?? OTP Must Already Be Verified ???????????????????????????????????????
+        // Ensure OTP was verified before proceeding
         const otpRecord = await Otp.findOne({
-            email,
+            email: normalizedEmail,
             purpose: 'company_admin_verify',
-            verified: true
+            verified: true,
         });
-
         if (!otpRecord) {
+            console.warn('[COMPANY-INVITE] OTP not verified for', normalizedEmail);
             return res.status(400).json({
                 message: 'Email not verified. Please verify OTP first.'
             });
         }
-
-        // Clean up verified OTP record
+        // OTP verified – clean up the record
         await Otp.deleteOne({ _id: otpRecord._id });
-        // ????????????????????????????????�        const existingUser = await User.findOne({ email: new RegExp(`^${email}$`, 'i') });
+
+        const existingUser = await User.findOne({ email: new RegExp(`^${normalizedEmail}$`, 'i') });
+
         if (existingUser && !isCompanyAdminRole(existingUser.role)) {
             return res.status(400).json({ message: 'Email is already used by a non-company-admin account' });
         }
 
         const verificationToken = crypto.randomBytes(32).toString('hex');
         const verificationLink = `${process.env.FRONTEND_URL || 'http://localhost:5174'}/verify-account?token=${verificationToken}`;
-        const inferredName = adminName || (email ? String(email).split('@')[0] : 'Company Admin');
+        const inferredName = adminName || (normalizedEmail ? String(normalizedEmail).split('@')[0] : 'Company Admin');
 
         const userPayload = {
             name: inferredName,
@@ -230,7 +199,7 @@ router.post('/', authenticate, upload.single('logo'), async (req, res) => {
                 user = await User.create(userPayload);
             } catch (err) {
                 if (err.code === 11000) {
-                    user = await User.findOne({ email: new RegExp(`^${email}$`, 'i') });
+                    user = await User.findOne({ email: new RegExp(`^${normalizedEmail}$`, 'i') });
                     if (!user) throw err;
                 } else {
                     throw err;
