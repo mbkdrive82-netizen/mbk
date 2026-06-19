@@ -9,21 +9,9 @@ import {
   CheckCircle2,
   Clock3,
   GraduationCap,
-  IdCard,
 } from "lucide-react";
 
 import { useAuth } from "@/context/AuthContext";
-import {
-  collectPortalUserAvatarSources,
-  getPortalUserDisplayName,
-  getPortalUserInitial,
-} from "@/utils/portalUserDisplay";
-import { canGenerateTrainerIdCard } from "@/utils/trainerIdCard";
-import PortalUserAvatar, {
-  PORTAL_AVATAR_CONTAINER_CLASS,
-  PORTAL_AVATAR_HERO_FALLBACK_CLASS,
-  PORTAL_AVATAR_HERO_SIZE_CLASS,
-} from "@/components/common/PortalUserAvatar";
 
 import useTrainerDashboardData from "./dashboard/useTrainerDashboardData";
 import { getTrainerDashboardAnalytics } from "@/services/trainerPortalService";
@@ -101,11 +89,6 @@ const SchedulesSectionSkeleton = () => (
   </>
 );
 
-const IDCardModal = dynamic(() => import("@/components/modals/IDCardModal"), {
-  ssr: false,
-  loading: () => null,
-});
-
 const TrainerDashboardNotificationsSection = dynamic(
   () => import("./dashboard/TrainerDashboardNotificationsSection"),
   {
@@ -128,13 +111,11 @@ function TrainerDashboard() {
   const { currentUser } = useAuth();
   const router = useRouter();
   const [hasMounted, setHasMounted] = useState(false);
-  const [showIDCard, setShowIDCard] = useState(false);
   const [showNotificationsSection, setShowNotificationsSection] = useState(false);
   const [showSchedulesSection, setShowSchedulesSection] = useState(false);
   const {
     error,
     loading,
-    profileData,
     recentActivities,
     stats,
     upcomingSchedules,
@@ -142,23 +123,11 @@ function TrainerDashboard() {
 
   const [portalAnalytics, setPortalAnalytics] = useState(null);
 
-  const trainer = profileData || currentUser || {};
-  const hydratedTrainer = hasMounted ? trainer : null;
-  const trainerName = getPortalUserDisplayName(hydratedTrainer || {});
-  const trainerInitial = getPortalUserInitial(hydratedTrainer || currentUser || {});
-  const trainerSpecialization =
-    hydratedTrainer?.specialization || "Professional Trainer";
-  const canViewIdCard = hasMounted && canGenerateTrainerIdCard(hydratedTrainer || {});
   const dashboardError = hasMounted ? error : "";
   const dashboardLoading = !hasMounted || loading;
   const dashboardRecentActivities = hasMounted ? recentActivities : [];
   const dashboardUpcomingSchedules = hasMounted ? upcomingSchedules : [];
   const dashboardStats = hasMounted ? stats : EMPTY_STATS;
-
-  const trainerImageSources = useMemo(
-    () => collectPortalUserAvatarSources(currentUser ?? null, hydratedTrainer || trainer),
-    [currentUser, hydratedTrainer, trainer],
-  );
 
   useEffect(() => {
     setHasMounted(true);
@@ -186,20 +155,12 @@ function TrainerDashboard() {
     };
   }, []);
 
-  const handleOpenSchedule = useCallback(() => {
-    router.push("/trainer/dashboard");
-  }, [router]);
-
   const handleOpenScheduleDate = useCallback(
     (rawDate) => {
       router.push(`/trainer/dashboard`);
     },
     [router],
   );
-
-  const handleOpenIdCard = useCallback(() => {
-    setShowIDCard(true);
-  }, []);
 
   const statCards = useMemo(
     () => [
@@ -237,69 +198,26 @@ function TrainerDashboard() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-4 px-3 sm:space-y-6 sm:px-6 lg:px-8">
-      {showIDCard ? (
-        <IDCardModal
-          isOpen={showIDCard}
-          onClose={() => setShowIDCard(false)}
-          user={trainer}
-        />
-      ) : null}
-
-      <section className="rounded-[24px] border border-slate-200 bg-white px-4 py-4 shadow-sm sm:rounded-[28px] sm:px-8 sm:py-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-start gap-3 sm:gap-4">
-            <PortalUserAvatar
-              user={currentUser}
-              profile={hydratedTrainer || trainer}
-              sources={hasMounted ? trainerImageSources : []}
-              initial={trainerInitial}
-              alt={trainerName}
-              className={`${PORTAL_AVATAR_CONTAINER_CLASS} ${PORTAL_AVATAR_HERO_SIZE_CLASS}`}
-              fallbackClassName={PORTAL_AVATAR_HERO_FALLBACK_CLASS}
-            />
-
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-slate-500">Welcome back</p>
-              <h1 className="break-words text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">
-                {trainerName}
-              </h1>
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500 sm:gap-3 sm:text-sm">
-                <span>{trainerSpecialization}</span>
-                {hydratedTrainer?.trainerId ? (
-                  <span className="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-700">
-                    ID {hydratedTrainer.trainerId}
-                  </span>
-                ) : null}
-              </div>
-            </div>
+      <section className="rounded-[24px] border border-slate-200 bg-white px-4 py-6 shadow-sm sm:rounded-[28px] sm:px-8 sm:py-8">
+        <div className="mx-auto flex max-w-4xl flex-col items-center justify-center gap-4 text-center">
+          <div>
+            <p className="text-sm font-medium text-slate-500">Trainer Portal</p>
+            <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">
+              Welcome back
+            </h1>
+            <p className="mt-3 text-sm text-slate-500 sm:text-base">
+              Use the activity workflow below to manage your day.
+            </p>
           </div>
 
-          <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:gap-3">
+          <div className="w-full max-w-sm">
             <button
               type="button"
-              onClick={handleOpenSchedule}
-              className="inline-flex w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
-            >
-              View Schedule
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push('/trainer/daily-visit')}
-              className="inline-flex w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
+              onClick={() => router.push('/trainer/activities')}
+              className="inline-flex w-full items-center justify-center rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
             >
               Trainer Activities
             </button>
-            {canViewIdCard ? (
-              <button
-                type="button"
-                onClick={handleOpenIdCard}
-                className="inline-flex w-full items-center justify-center rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 sm:w-auto"
-              >
-                <IdCard className="mr-2 h-4 w-4" />
-                View ID Card
-              </button>
-            ) : null}
           </div>
         </div>
       </section>
@@ -375,7 +293,6 @@ function TrainerDashboard() {
         <TrainerDashboardSchedulesSection
           recentActivities={dashboardRecentActivities}
           upcomingSchedules={dashboardUpcomingSchedules}
-          onOpenSchedule={handleOpenSchedule}
           onOpenScheduleDate={handleOpenScheduleDate}
         />
       ) : (

@@ -198,8 +198,8 @@ router.get("/dashboard", authenticate, async (req, res) => {
       assignmentMessage,
       assignedCollege,
       totalStudents,
-      presentStudents,
-      absentStudents,
+      presentStudents: studentsPresent,
+      absentStudents: studentsAbsent,
       attendancePercentage,
       todaysActivities,
       clockInStatus: {

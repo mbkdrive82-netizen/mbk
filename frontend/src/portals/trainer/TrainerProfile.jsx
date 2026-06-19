@@ -602,13 +602,18 @@ const TrainerProfile = () => {
                 className="mb-4 rounded-xl border-indigo-100 bg-indigo-50/50 text-indigo-800"
               />
             )}
-            <div className="flex items-center justify-between mb-4">
-              <Title
-                level={4}
-                className="m-0 text-gray-800 font-calibri uppercase tracking-wider border-l-4 border-indigo-600 pl-3"
-              >
-                Personal Information
-              </Title>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+              <div>
+                <Title
+                  level={4}
+                  className="m-0 text-gray-800 font-calibri uppercase tracking-wider border-l-4 border-indigo-600 pl-3"
+                >
+                  Personal Information
+                </Title>
+                <Text className="text-xs text-slate-500 block mt-2 max-w-2xl">
+                  Keep your trainer profile contact and location details current. Editing is disabled while verification is in progress.
+                </Text>
+              </div>
               <Button
                 type="primary"
                 ghost
@@ -637,13 +642,26 @@ const TrainerProfile = () => {
                     : "Edit Profile"
                 }
               >
-                {["under_review", "approved"].includes(workflowStatus)
+                {[
+                  "under_review",
+                  "approved",
+                ].includes(workflowStatus)
                   ? workflowStatus === "approved"
                     ? "Verified (Locked)"
                     : "Review In Progress"
                   : "Edit Info"}
               </Button>
             </div>
+            {workflowStatus === "approved" && (
+              <Text className="text-xs text-slate-500 mb-4 block">
+                Your profile is verified and locked. Please contact support if you need to request a change.
+              </Text>
+            )}
+            {workflowStatus === "under_review" && (
+              <Text className="text-xs text-slate-500 mb-4 block">
+                Your trainer profile is under review and edits are temporarily disabled.
+              </Text>
+            )}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
               <Row gutter={[24, 24]}>
                 <Col xs={24} md={12}>
@@ -755,21 +773,23 @@ const TrainerProfile = () => {
             </Text>
             <Divider className="my-6 border-slate-100" />
 
-            <Alert
-              title={
-                <Text
-                  strong
-                  className="text-[11px] uppercase tracking-widest text-indigo-700"
-                >
-                  Required Documents Policy
-                </Text>
-              }
-              description={
-                <Text className="text-xs text-slate-500">
-                  Please select and upload all required documents clearly. Only
-                  verified trainers can accept active schedules and payouts.
-                </Text>
-              }
+            <div className="mb-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left">
+              <Text className="text-xs font-bold uppercase tracking-[0.28em] text-slate-500">
+                What to do next
+              </Text>
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                {[
+                  "Upload all required documents clearly.",
+                  "Submit for verification once complete.",
+                  "Wait for approval before accepting schedules.",
+                ].map((item) => (
+                  <div key={item} className="rounded-2xl border border-slate-100 bg-white px-3 py-2 text-[13px] text-slate-600">
+                    {item}
+                  </div>
+                ))}
+              </div>
+            </div>
+
               type="info"
               showIcon={false}
               className="bg-indigo-50 border-indigo-100 rounded-2xl p-4 text-left"
@@ -818,6 +838,19 @@ const TrainerProfile = () => {
                           ? "All required documents are uploaded. Submit them to start review."
                           : "Upload the remaining required documents to continue your registration."}
                   </Text>
+                  {missingDocuments.length > 0 && (
+                    <Text className="mt-3 block text-xs text-rose-600 font-semibold">
+                      {missingDocuments.length} document{missingDocuments.length === 1 ? '' : 's'} still missing: {missingDocuments.map((doc) => doc.label).join(', ')}.
+                    </Text>
+                  )}
+                  <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left text-xs text-slate-600">
+                    <div className="font-semibold text-slate-800 mb-2">What these document statuses mean</div>
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <div className="rounded-2xl bg-emerald-50 px-3 py-2 text-emerald-700">Approved: ready to go</div>
+                      <div className="rounded-2xl bg-sky-50 px-3 py-2 text-sky-700">Under Review: wait for verification</div>
+                      <div className="rounded-2xl bg-rose-50 px-3 py-2 text-rose-700">Rejected: re-upload the marked document</div>
+                    </div>
+                  </div>
                 </div>
               </Col>
               <Col xs={24} lg={15}>

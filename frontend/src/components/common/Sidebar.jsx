@@ -97,6 +97,7 @@ const Sidebar = () => {
 
         // Trainer Links
         { name: 'Dashboard', href: '/trainer/dashboard', icon: HomeIcon, roles: ['Trainer'] },
+        { name: 'Trainer Activities', href: '/trainer/activities', icon: ClipboardDocumentListIcon, roles: ['Trainer'] },
     ];
 
     // Filter navigation based on user role
@@ -322,34 +323,14 @@ const Sidebar = () => {
                                 </div>
                             </div>
                         )}
-                        <div className="flex items-center justify-between w-full">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setIsQuickSettingsOpen(false);
-                                    setIsUserMenuOpen((prev) => !prev);
-                                }}
-                                className="flex items-center text-left flex-1 min-w-0"
-                            >
-                                <div className="h-9 w-9 shrink-0 rounded-full bg-accent flex items-center justify-center text-white font-bold">
-                                    {(user?.displayName || user?.email || '?').charAt(0).toUpperCase()}
-                                </div>
-                                <div className="ml-3 truncate">
-                                    <p className="text-sm font-medium text-white truncate">{user?.name || user?.displayName || user?.email}</p>
-                                    <p className="text-xs font-medium text-accentLight truncate">
-                                        {user?.role || 'User'}
-                                    </p>
-                                </div>
-                            </button>
-                            <div className="ml-2 shrink-0">
-                                <NotificationBell 
-                                    iconClassName="h-6 w-6 text-white hover:text-accentLight transition-colors"
-                                    badgeClassName="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white shadow-sm ring-1 ring-[#113142]"
-                                />
-                            </div>
-                        </div>
+                        <div className="flex items-center justify-start w-full">
+                        <NotificationBell
+                            iconClassName="h-7 w-7 text-white hover:text-accentLight transition-colors"
+                            badgeClassName="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white shadow-sm ring-1 ring-[#113142]"
+                        />
                     </div>
                 </div>
+            </div>
             </div>
             <SettingsModal
                 isOpen={isSettingsOpen}

@@ -190,6 +190,10 @@ export default function SelfieCapture({
         </div>
       )}
 
+      <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-center text-sm font-semibold text-emerald-700">
+        Capture a geotagged selfie inside college perimeter. Gallery uploads are blocked.
+      </div>
+
       {isSaved && !uploading && (
         <div className="mt-4 flex items-center gap-2 text-sm font-semibold text-emerald-700">
           <CheckCircle size={16} />

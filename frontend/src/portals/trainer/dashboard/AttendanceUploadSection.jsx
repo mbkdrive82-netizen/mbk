@@ -278,9 +278,7 @@ function AttendanceUploadSection() {
         }),
       );
 
-      const result = await api.post("/student-activities/attendance/submit", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const result = await api.post("/student-activities/attendance/submit", formData);
 
       setUploadStatus("success");
       setUploadResult(result?.data || result);

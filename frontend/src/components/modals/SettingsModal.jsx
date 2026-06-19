@@ -157,7 +157,7 @@ const SettingsModal = ({ isOpen, onClose, onSave, user }) => {
                                                     <form onSubmit={handleSubmit} className="space-y-4">
                                                         <div>
                                                             <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                                                                Name {user?.verificationStatus === 'VERIFIED' ? <span className="text-xs text-indigo-500 font-bold">(Locked)</span> : (user?.profileCompletedOnce && user?.role === 'Trainer' && <span className="text-xs text-indigo-500 font-bold">(Locked)</span>)}
+                                                                Name
                                                             </label>
                                                             <input
                                                                 type="text"
@@ -165,13 +165,20 @@ const SettingsModal = ({ isOpen, onClose, onSave, user }) => {
                                                                 id="name"
                                                                 value={formData.name ?? ''}
                                                                 onChange={handleChange}
-                                                                disabled={user?.verificationStatus === 'VERIFIED' || (user?.profileCompletedOnce && user?.role === 'Trainer')}
-                                                                className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm border p-2 ${(user?.verificationStatus === 'VERIFIED' || (user?.profileCompletedOnce && user?.role === 'Trainer'))
+                                                                disabled={user?.verificationStatus === 'VERIFIED' || user?.role === 'Trainer'}
+                                                                className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm sm:text-sm border p-2 ${(user?.verificationStatus === 'VERIFIED' || user?.role === 'Trainer')
                                                                     ? 'bg-gray-100 text-gray-600 cursor-not-allowed'
                                                                     : 'focus:border-indigo-500 focus:ring-indigo-500'
                                                                     }`}
                                                                 required
                                                             />
+                                                            {(user?.verificationStatus === 'VERIFIED' || user?.role === 'Trainer') && (
+                                                                <p className="mt-2 text-xs text-gray-500">
+                                                                    {user?.role === 'Trainer'
+                                                                        ? 'Name is locked for trainer accounts and is managed through the Trainer Profile page.'
+                                                                        : 'This value is locked while your account is verified.'}
+                                                                </p>
+                                                            )}
                                                         </div>
                                                         <div>
                                                             <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email</label>
@@ -185,17 +192,21 @@ const SettingsModal = ({ isOpen, onClose, onSave, user }) => {
                                                                 required
                                                                 disabled
                                                             />
+                                                            <p className="mt-2 text-xs text-gray-500">
+                                                                Email is used for login and important notifications.
+                                                            </p>
                                                         </div>
 
                                                         {user?.role === 'Trainer' && (
-                                                            <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
-                                                                <p className="text-xs text-blue-800">
-                                                                    Profile details (Phone, City, Specialization) are managed in <strong>My Profile</strong>.
+                                                            <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-3 mb-4">
+                                                                <p className="text-sm font-semibold text-blue-900">Trainer account details</p>
+                                                                <p className="mt-1 text-xs text-blue-800">
+                                                                    Account-level settings are updated here. Trainer-specific fields like phone, city, and specialization should be edited on your Trainer Profile page.
                                                                 </p>
                                                                 <button
                                                                     type="button"
                                                                     onClick={openProfilePage}
-                                                                    className="mt-2 inline-flex items-center rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                                                                    className="mt-3 inline-flex items-center rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
                                                                 >
                                                                     Open My Profile
                                                                 </button>
@@ -206,29 +217,29 @@ const SettingsModal = ({ isOpen, onClose, onSave, user }) => {
                                                             <label htmlFor="password" className="block text-sm font-medium text-gray-700">
                                                                 New Password <span className="text-gray-400 font-normal">(Leave blank to keep current)</span>
                                                             </label>
-                                                            <div className="relative">
-                                                                <input
-                                                                    type={showPassword ? "text" : "password"}
-                                                                    name="password"
-                                                                    id="password"
-                                                                    value={formData.password ?? ''}
-                                                                    onChange={handleChange}
-                                                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 pr-10"
-                                                                    placeholder="••••••••"
-                                                                />
-                                                                <button
-                                                                    type="button"
-                                                                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-500"
-                                                                    onClick={() => setShowPassword(!showPassword)}
-                                                                >
-                                                                    {showPassword ? (
-                                                                        <EyeSlashIcon className="h-5 w-5" aria-hidden="true" />
-                                                                    ) : (
-                                                                        <EyeIcon className="h-5 w-5" aria-hidden="true" />
-                                                                    )}
-                                                                </button>
-                                                            </div>
+                                                        <div className="relative">
+                                                            <input
+                                                                type={showPassword ? "text" : "password"}
+                                                                name="password"
+                                                                id="password"
+                                                                value={formData.password ?? ''}
+                                                                onChange={handleChange}
+                                                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 pr-10"
+                                                                placeholder="••••••••"
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-500"
+                                                                onClick={() => setShowPassword(!showPassword)}
+                                                            >
+                                                                {showPassword ? (
+                                                                    <EyeSlashIcon className="h-5 w-5" aria-hidden="true" />
+                                                                ) : (
+                                                                    <EyeIcon className="h-5 w-5" aria-hidden="true" />
+                                                                )}
+                                                            </button>
                                                         </div>
+                                                    </div>
 
                                                         {/* Hide 2FA for Trainers as requested */}
                                                         {user && user.role !== 'Trainer' && (

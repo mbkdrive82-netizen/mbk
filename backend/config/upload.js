@@ -11,6 +11,10 @@ const GEO_IMAGE_FIELDS = new Set([
     'photos',
     'image',
     'images',
+    'check_in_image',
+    'check_out_image',
+    'clock_in_image',
+    'clock_out_image',
     'checkOutGeoImage',
     'activityPhotos',
     'checkOutSignature'
@@ -93,7 +97,14 @@ const multiStorage = multer.diskStorage({
         else if (file.fieldname === 'signature') dir = signatureDir;
         else if (file.fieldname === 'activityPhotos') dir = photoDir;
         else if (file.fieldname === 'activityVideos') dir = videoDir;
-        else if (file.fieldname === 'checkOutGeoImage' || file.fieldname === 'photo' || file.fieldname === 'check_in_image' || file.fieldname === 'check_out_image') dir = imageDir;
+        else if (
+            file.fieldname === 'checkOutGeoImage' ||
+            file.fieldname === 'photo' ||
+            file.fieldname === 'check_in_image' ||
+            file.fieldname === 'check_out_image' ||
+            file.fieldname === 'clock_in_image' ||
+            file.fieldname === 'clock_out_image'
+        ) dir = imageDir;
         else if (file.fieldname === 'checkOutSignature') dir = signatureDir;
         cb(null, dir);
     },
@@ -189,7 +200,9 @@ const uploadAttendance = multer({
     { name: 'activityVideos', maxCount: 10 },
     { name: 'checkOutSignature', maxCount: 1 },
     { name: 'check_in_image', maxCount: 1 },
-    { name: 'check_out_image', maxCount: 1 }
+    { name: 'check_out_image', maxCount: 1 },
+    { name: 'clock_in_image', maxCount: 1 },
+    { name: 'clock_out_image', maxCount: 1 }
 ]);
 
 // Upload middleware for manual attendance (optional image)

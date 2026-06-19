@@ -89,9 +89,7 @@ export default function StudentAttendancePage() {
     }
 
     try {
-      await api.post('/student-activities/attendance/submit', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      await api.post('/student-activities/attendance/submit', formData);
       toast.success('Excel sheet uploaded successfully');
       setExcelFile(null);
     } catch (err) {
@@ -130,9 +128,7 @@ export default function StudentAttendancePage() {
     );
 
     try {
-      await api.post('/student-activities/attendance/submit', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      await api.post('/student-activities/attendance/submit', formData);
       toast.success('Live attendance evidence uploaded successfully');
       setLiveFile(null);
     } catch (err) {

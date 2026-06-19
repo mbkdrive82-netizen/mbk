@@ -219,7 +219,9 @@ router.post("/attendance/clock-in", authenticate, uploadAttendance, async (req, 
     }
 
     // File validation
-    const checkInImageFile = req.files && req.files['check_in_image'] ? req.files['check_in_image'][0] : null;
+    const checkInImageFile = req.files && (req.files['check_in_image'] || req.files['clock_in_image'])
+      ? (req.files['check_in_image'] || req.files['clock_in_image'])[0]
+      : null;
     if (!checkInImageFile) {
       return res.status(400).json({ success: false, message: "Clock-in photo capture is required" });
     }
@@ -566,7 +568,9 @@ router.post("/attendance/clock-out", authenticate, uploadAttendance, async (req,
     }
 
     // File validation
-    const checkOutImageFile = req.files && req.files['check_out_image'] ? req.files['check_out_image'][0] : null;
+    const checkOutImageFile = req.files && (req.files['check_out_image'] || req.files['clock_out_image'])
+      ? (req.files['check_out_image'] || req.files['clock_out_image'])[0]
+      : null;
     if (!checkOutImageFile) {
       return res.status(400).json({ success: false, message: "Clock-out photo capture is required" });
     }

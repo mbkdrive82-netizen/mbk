@@ -773,7 +773,7 @@ const fetchWithAuth = async (endpoint, options = {}) => {
       }
     }
 
-    if (response.status === 401 && !skipAuthHeaders) {
+    if ((response.status === 401 || response.status === 403) && !skipAuthHeaders) {
       dispatchUnauthorized("session_expired");
     }
 

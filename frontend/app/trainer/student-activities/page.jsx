@@ -7,13 +7,13 @@ import PortalLoadingState from "@/components/common/PortalLoadingState";
 export default function StudentActivitiesRoute() {
   const router = useRouter();
   useEffect(() => {
-    router.replace("/trainer/daily-visit");
+    router.replace("/trainer/activities");
   }, [router]);
 
   return (
     <PortalLoadingState
       title="Redirecting"
-      description="Redirecting you to the unified Daily Visit Workflow..."
+      description="Redirecting you to Trainer Activities..."
     />
   );
 }

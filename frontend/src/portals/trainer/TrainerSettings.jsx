@@ -7,13 +7,34 @@ import { api } from "@/services/api";
 import { notify } from "@/lib/toast";
 import { Shield, LogOut, Save, Eye, EyeOff } from "lucide-react";
 
-const Section = ({ title, children }) => (
-  <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-5">
-    <div className="px-5 py-4 border-b bg-gray-50/50">
+const Section = ({ title, description, children }) => (
+  <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden mb-6">
+    <div className="px-6 py-5 border-b bg-gray-50/80">
       <h2 className="font-semibold text-gray-900 text-sm">{title}</h2>
+      {description ? (
+        <p className="mt-1 text-xs text-gray-500 max-w-3xl">{description}</p>
+      ) : null}
     </div>
-    <div className="px-5 py-5">{children}</div>
+    <div className="px-6 py-6">{children}</div>
   </div>
+);
+
+const ToggleSwitch = ({ label, description, checked, onChange }) => (
+  <label className="flex cursor-pointer select-none items-center justify-between gap-4 rounded-3xl border border-gray-200 bg-white px-4 py-4 transition hover:border-indigo-300">
+    <span className="min-w-0">
+      <span className="block text-sm font-semibold text-gray-900">{label}</span>
+      <span className="block text-xs text-gray-500">{description}</span>
+    </span>
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={onChange}
+      className={`relative inline-flex h-7 w-14 shrink-0 items-center rounded-full transition-colors duration-200 ${checked ? 'bg-indigo-600' : 'bg-gray-200'}`}
+    >
+      <span className={`inline-block h-6 w-6 transform rounded-full bg-white shadow transition duration-200 ${checked ? 'translate-x-7' : 'translate-x-1'}`} />
+    </button>
+  </label>
 );
 
 export default function TrainerSettings() {
@@ -80,20 +101,25 @@ export default function TrainerSettings() {
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 pb-24 md:pb-6">
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-gray-900">Settings</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Account preferences and security</p>
+        <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+        <p className="text-sm text-gray-500 mt-1 max-w-2xl">
+          Manage your notification preferences, password, and security settings from one place.
+        </p>
       </div>
 
       {/* Profile overview */}
-      <Section title="Your Account">
-        <div className="flex items-center gap-4">
+      <Section
+        title="Your Account"
+        description="This summary shows the account currently signed in. Keep your email secure and update your password regularly."
+      >
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
           <div className="w-14 h-14 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 text-xl font-bold shrink-0">
             {(currentUser?.name || "T")[0]}
           </div>
-          <div>
-            <p className="font-semibold text-gray-900">{currentUser?.name || "—"}</p>
-            <p className="text-sm text-gray-400">{currentUser?.email}</p>
-            <span className="inline-flex mt-1 px-2 py-0.5 bg-indigo-50 text-indigo-700 text-xs font-medium rounded-full">
+          <div className="min-w-0">
+            <p className="font-semibold text-gray-900 text-base truncate">{currentUser?.name || "—"}</p>
+            <p className="text-sm text-gray-500 truncate">{currentUser?.email}</p>
+            <span className="inline-flex mt-2 px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs font-semibold uppercase tracking-[0.12em]">
               Trainer
             </span>
           </div>
@@ -101,25 +127,29 @@ export default function TrainerSettings() {
       </Section>
 
       {/* Notifications */}
-      <Section title="Notifications">
-        <div className="space-y-1">
+      <Section
+        title="Notifications"
+        description="Choose the alerts you want to receive for schedule updates, payslips, attendance verification, and more."
+      >
+        <div className="space-y-3">
           {Object.entries(notifications).map(([key, val]) => (
-            <div key={key} className="flex items-center justify-between py-3 border-b border-gray-50 last:border-0">
-              <span className="text-sm text-gray-700">{notifLabels[key]}</span>
-              <button
-                onClick={() => setNotifications((p) => ({ ...p, [key]: !val }))}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${val ? "bg-indigo-600" : "bg-gray-200"}`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${val ? "translate-x-6" : "translate-x-1"}`} />
-              </button>
-            </div>
+            <ToggleSwitch
+              key={key}
+              label={notifLabels[key]}
+              description={val ? 'Enabled' : 'Disabled'}
+              checked={val}
+              onChange={() => setNotifications((p) => ({ ...p, [key]: !val }))}
+            />
           ))}
         </div>
-        <div className="flex justify-end mt-4">
-          <button onClick={handleSave} disabled={savingNotif}
-            className="flex items-center gap-2 px-4 py-2 text-sm bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50">
+        <div className="flex justify-end mt-5">
+          <button
+            onClick={handleSave}
+            disabled={savingNotif}
+            className="inline-flex items-center gap-2 rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
             <Save className="w-4 h-4" />
-            {savingNotif ? "Saving…" : "Save"}
+            {savingNotif ? "Saving preferences…" : "Save preferences"}
           </button>
         </div>
       </Section>
@@ -158,22 +188,30 @@ export default function TrainerSettings() {
       </Section>
 
       {/* Sign out */}
-      <div className="bg-red-50 rounded-2xl p-5 border border-red-100">
-        <h3 className="font-semibold text-red-900 mb-1">Sign Out</h3>
-        <p className="text-sm text-red-700 mb-3">You will be logged out and returned to the home page.</p>
-        <button onClick={async () => {
-            try {
-              await logout();
-              router.push('/');
-            } catch (error) {
-              console.error('Logout failed:', error);
-              router.push('/');
-            }
-          }}
-          className="flex items-center gap-2 px-4 py-2 text-sm bg-red-600 text-white rounded-xl hover:bg-red-700">
-          <LogOut className="w-4 h-4" />
-          Sign out
-        </button>
+      <div className="bg-red-50 rounded-3xl p-6 border border-red-100 shadow-sm">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="font-semibold text-red-900">Sign out</h3>
+            <p className="text-sm text-red-700">
+              Sign out of the trainer portal to protect your account when you're finished.
+            </p>
+          </div>
+          <button
+            onClick={async () => {
+              try {
+                await logout();
+                router.push('/');
+              } catch (error) {
+                console.error('Logout failed:', error);
+                router.push('/');
+              }
+            }}
+            className="inline-flex items-center gap-2 rounded-2xl bg-red-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700"
+          >
+            <LogOut className="w-4 h-4" />
+            Sign out
+          </button>
+        </div>
       </div>
     </div>
   );

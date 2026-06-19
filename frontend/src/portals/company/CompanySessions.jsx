@@ -203,18 +203,30 @@ export default function CompanySessions() {
                   </td>
                   <td className="px-4 py-3">{session.status || "—"}</td>
                   <td className="px-4 py-3">
-                    {session.status?.toLowerCase() === "cancelled" ? (
-                      <span className="text-sm text-slate-500">Cancelled</span>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={processingScheduleId === session._id}
-                        onClick={() => handleDeleteSchedule(session)}
-                        className="inline-flex items-center rounded-md bg-rose-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50 disabled:hover:bg-rose-600"
-                      >
-                        {processingScheduleId === session._id ? "Cancelling..." : "Cancel"}
-                      </button>
-                    )}
+                    <div className="flex flex-wrap gap-2">
+                      {session.status?.toLowerCase() === "cancelled" ? (
+                        <span className="text-sm text-slate-500">Cancelled</span>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            disabled={processingScheduleId === session._id}
+                            onClick={() => handleDeleteSchedule(session)}
+                            className="inline-flex items-center rounded-md bg-rose-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50 disabled:hover:bg-rose-600"
+                          >
+                            {processingScheduleId === session._id ? "Cancelling..." : "Cancel"}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={processingScheduleId === session._id}
+                            onClick={() => handleRescheduleSchedule(session)}
+                            className="inline-flex items-center rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50"
+                          >
+                            {processingScheduleId === session._id ? "Processing..." : "Reschedule"}
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

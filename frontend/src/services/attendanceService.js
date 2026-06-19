@@ -9,33 +9,21 @@ import { api } from '@/services/api';
  * Canonical flow step 1: check-in.
  */
 export const checkInAttendance = (formData) => {
-    return api.post('/attendance/check-in', formData, {
-        headers: {
-            'Content-Type': 'multipart/form-data'
-        }
-    });
+    return api.post('/attendance/check-in', formData);
 };
 
 /**
  * Canonical flow step 2: check-out.
  */
 export const checkOutAttendance = (formData) => {
-    return api.post('/attendance/check-out', formData, {
-        headers: {
-            'Content-Type': 'multipart/form-data'
-        }
-    });
+    return api.post('/attendance/check-out', formData);
 };
 
 /**
  * Legacy adapter endpoint. Prefer checkInAttendance + checkOutAttendance.
  */
 export const submitAttendance = (formData) => {
-    return api.post('/attendance/submit', formData, {
-        headers: {
-            'Content-Type': 'multipart/form-data'
-        }
-    });
+    return api.post('/attendance/submit', formData);
 };
 
 /**
@@ -78,11 +66,7 @@ export const verifySubmission = (id, verificationData) => {
  * @param {FormData} formData - Form data containing image, signature, and attendance details
  */
 export const uploadAttendance = (formData) => {
-    return api.post('/attendance/upload', formData, {
-        headers: {
-            'Content-Type': 'multipart/form-data'
-        }
-    });
+    return api.post('/attendance/upload', formData);
 };
 
 /**
@@ -105,11 +89,7 @@ export const createManualAttendance = (data, imageFile = null) => {
         formData.append('image', imageFile);
     }
 
-    return api.post('/attendance/manual', formData, {
-        headers: {
-            'Content-Type': 'multipart/form-data'
-        }
-    });
+    return api.post('/attendance/manual', formData);
 };
 
 /**

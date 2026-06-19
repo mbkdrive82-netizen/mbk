@@ -88,7 +88,7 @@ const ProfileIdentityHeaderCard = memo(function ProfileIdentityHeaderCard({
 
         <Col flex="auto">
           <div className="flex flex-col">
-            <div className="mb-2 flex items-center gap-3">
+            <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
               <Title
                 level={2}
                 style={{ margin: 0 }}
@@ -104,7 +104,13 @@ const ProfileIdentityHeaderCard = memo(function ProfileIdentityHeaderCard({
               </Tag>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
+            <Text className="text-sm text-slate-500 max-w-xl">
+              {isProfileLocked
+                ? 'Selfie updates are paused while your profile is under review.'
+                : 'Tap your selfie to upload a fresh image for verification.'}
+            </Text>
+
+            <div className="mt-4 flex flex-wrap items-center gap-3">
               <Tag
                 className={`flex items-center gap-2 rounded-xl border px-4 py-1.5 text-xs font-bold uppercase tracking-wide ${workflowMeta.badgeClass}`}
               >

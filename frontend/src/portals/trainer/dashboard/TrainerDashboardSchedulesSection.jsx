@@ -14,14 +14,13 @@ import { getStatusMeta } from "./dashboardUtils";
 function TrainerDashboardSchedulesSection({
   recentActivities,
   upcomingSchedules,
-  onOpenSchedule,
   onOpenScheduleDate,
 }) {
   return (
     <>
       <section className="rounded-[24px] border border-slate-200 bg-white shadow-sm sm:rounded-[28px]">
         <div className="border-b border-slate-200 px-4 py-4 sm:px-6 sm:py-5">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col gap-3">
             <div>
               <h2 className="text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">
                 Upcoming Sessions
@@ -30,13 +29,6 @@ function TrainerDashboardSchedulesSection({
                 Your next assigned sessions and scheduled classes.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={onOpenSchedule}
-              className="hidden rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 sm:inline-flex"
-            >
-              Open Full Schedule
-            </button>
           </div>
         </div>
 
