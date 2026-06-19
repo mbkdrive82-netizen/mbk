@@ -98,7 +98,7 @@ router.use("/drive-hierarchy", driveRoutes);
 router.use("/training-platform", trainingPlatformRoutes);
 router.use("/internal/metrics", internalMetricsRoutes);
 router.use("/admin/trainers", adminTrainerRoutes);
+router.use("/teacher", teacherWorkflowRoutes);
 router.use("/", teacherWorkflowRoutes);
-
 
 export default router;

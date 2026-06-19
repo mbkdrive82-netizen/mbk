@@ -1282,7 +1282,10 @@ router.post('/:id/assign-trainers', authenticate, isSPOCAdmin, async (req, res) 
                 // Create new assignment
                 await TrainerAssignment.create({
                     trainerName,
+                    trainerid: String(trainer._id),
+                    trainername: trainerName,
                     collegeName: college.name,
+                    collegename: college.name,
                     batchName: trainerData.batchName || "",
                     active: true
                 });

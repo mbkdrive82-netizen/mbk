@@ -46,7 +46,6 @@ export const roleLinks = {
 
   Trainer: [
     { label: "Dashboard",                 href: "/trainer/dashboard",            icon: Home },
-    { label: "Daily Visit",                href: "/trainer/daily-visit",          icon: ClipboardList },
     { label: "Profile Settings",           href: "/trainer/settings",             icon: Settings },
   ],
 

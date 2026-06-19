@@ -17,6 +17,13 @@ export const companyPortalService = {
   getColleges: () => api.get("/company-portal/colleges"),
   getCourses: () => api.get("/company-portal/courses"),
   getTrainers: () => api.get("/company-portal/trainers"),
+  updateSchedule: (id, updates) => api.put(`/schedules/${id}`, updates),
+  deleteSchedule: (id, reason = "") => {
+    const url = reason
+      ? `/schedules/${id}?reason=${encodeURIComponent(reason)}`
+      : `/schedules/${id}`;
+    return api.delete(url);
+  },
 };
 
 export default companyPortalService;

@@ -428,31 +428,58 @@ const getAuthHeaders = () => {
 const handleResponse = async (response) => {
   debugLog("[API] Response status:", response.status, response.statusText);
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    debugLog("[API] Error response text:", errorText);
+  const rawText = await response.text();
+  debugLog("[API] Raw response text:", rawText);
 
-    let errorMessage;
-    let errorJson = null;
-    try {
-      errorJson = JSON.parse(errorText);
-      debugLog("[API] Error JSON:", errorJson);
-      errorMessage = errorJson.message || errorText;
-    } catch {
-      errorMessage = errorText;
+  const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+  const isJson =
+    contentType.includes("application/json") ||
+    contentType.includes("text/json") ||
+    rawText.trim().startsWith("{") ||
+    rawText.trim().startsWith("[");
+
+  let body = null;
+  if (rawText) {
+    if (isJson) {
+      try {
+        body = JSON.parse(rawText);
+      } catch (parseError) {
+        debugLog("[API] JSON parse error:", parseError, "raw text:", rawText);
+        body = rawText;
+      }
+    } else {
+      body = rawText;
     }
-    const error = new Error(
-      errorMessage || `HTTP error! status: ${response.status}`,
-    );
+  }
+
+  if (!response.ok) {
+    const errorMessage =
+      body && typeof body === "object"
+        ? body.message || JSON.stringify(body)
+        : String(body || response.statusText || `HTTP error! status: ${response.status}`);
+
+    const error = new Error(errorMessage || `HTTP error! status: ${response.status}`);
     error.status = response.status;
-    error.data = errorJson?.data || null;
-    error.response = errorJson;
+    error.statusText = response.statusText;
+    error.data = body && typeof body === "object" ? body.data || null : null;
+    error.response = body;
     throw error;
   }
 
-  const data = await response.json();
-  debugLog("[API] Success response:", data);
-  return data;
+  if (body === null || body === "") {
+    return null;
+  }
+
+  if (typeof body === "string") {
+    try {
+      return JSON.parse(body);
+    } catch {
+      return body;
+    }
+  }
+
+  debugLog("[API] Success response:", body);
+  return body;
 };
 
 const dispatchUnauthorized = (reason = "session_expired") => {

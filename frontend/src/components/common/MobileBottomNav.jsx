@@ -39,8 +39,6 @@ const NAV_MAP = {
   ],
   Trainer: [
     { name: "Home", href: "/trainer/dashboard", icon: Home },
-    { name: "Schedule", href: "/trainer/schedule", icon: Calendar },
-    { name: "Payslips", href: "/trainer/payslips", icon: Receipt },
   ],
   Student: [
     { name: "Home", href: "/student/dashboard", icon: Home },

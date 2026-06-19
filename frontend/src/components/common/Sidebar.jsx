@@ -97,8 +97,6 @@ const Sidebar = () => {
 
         // Trainer Links
         { name: 'Dashboard', href: '/trainer/dashboard', icon: HomeIcon, roles: ['Trainer'] },
-        { name: 'Schedule', href: '/trainer/schedule', icon: ClockIcon, roles: ['Trainer'] },
-        { name: 'Pay Slips', href: '/trainer/payslips', icon: CurrencyRupeeIcon, roles: ['Trainer'] },
     ];
 
     // Filter navigation based on user role

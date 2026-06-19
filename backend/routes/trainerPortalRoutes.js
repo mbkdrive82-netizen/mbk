@@ -17,14 +17,21 @@ const escapeRegex = (value = "") =>
 async function getActiveAssignment(trainer, reqUser) {
   const trainerName = trainer.firstName && trainer.lastName
     ? `${trainer.firstName} ${trainer.lastName}`
-    : (trainer.userId?.name || reqUser.name || "");
+    : (trainer.userId?.name || trainer.email || reqUser.name || "");
 
   if (!trainerName) return null;
 
-  let assignment = await TrainerAssignment.findOne({
-    trainerName: { $regex: new RegExp(`^${escapeRegex(trainerName)}$`, "i") },
-    active: true,
-  });
+  const assignmentQuery = { active: true };
+  if (trainer._id) {
+    assignmentQuery.$or = [
+      { trainerid: String(trainer._id) },
+      { trainerName: { $regex: new RegExp(`^${escapeRegex(trainerName)}$`, "i") } }
+    ];
+  } else {
+    assignmentQuery.trainerName = { $regex: new RegExp(`^${escapeRegex(trainerName)}$`, "i") };
+  }
+
+  let assignment = await TrainerAssignment.findOne(assignmentQuery);
 
   if (!assignment) {
     let college = null;
@@ -37,7 +44,10 @@ async function getActiveAssignment(trainer, reqUser) {
     if (college) {
       assignment = await TrainerAssignment.create({
         trainerName,
+        trainerid: String(trainer._id),
+        trainername: trainerName,
         collegeName: college.name,
+        collegename: college.name,
         active: true,
       });
     }

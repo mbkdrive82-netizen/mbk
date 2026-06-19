@@ -660,24 +660,13 @@ export const AuthProvider = ({ children }) => {
       setUser(null);
       setUserRole(null);
       setIsAuthenticated(false);
-    } catch (err) {
-      console.error('Logout error:', err);
+    } catch {
+      // Ignore logout failures and ensure redirect on caller side.
+    }
+    if (typeof window !== 'undefined') {
+      window.location.replace('/');
     }
   };
-
-  const actionsRef = useRef({});
-  useEffect(() => {
-    actionsRef.current = {
-      registerStudent,
-      loginStudent,
-      registerCompany,
-      loginCompany,
-      login,
-      setAuthUser,
-      logout,
-      setError,
-    };
-  });
 
   const value = useMemo(
     () => ({
@@ -687,16 +676,16 @@ export const AuthProvider = ({ children }) => {
       isAuthenticated,
       loading,
       error,
-      registerStudent: (...args) => actionsRef.current.registerStudent(...args),
-      loginStudent: (...args) => actionsRef.current.loginStudent(...args),
-      registerCompany: (...args) => actionsRef.current.registerCompany(...args),
-      loginCompany: (...args) => actionsRef.current.loginCompany(...args),
-      login: (...args) => actionsRef.current.login(...args),
-      setAuthUser: (...args) => actionsRef.current.setAuthUser(...args),
-      logout: (...args) => actionsRef.current.logout(...args),
-      setError: (...args) => actionsRef.current.setError(...args),
+      registerStudent,
+      loginStudent,
+      registerCompany,
+      loginCompany,
+      login,
+      setAuthUser,
+      logout,
+      setError,
     }),
-    [user, userRole, isAuthenticated, loading, error],
+    [user, userRole, isAuthenticated, loading, error, registerStudent, loginStudent, registerCompany, loginCompany, login, setAuthUser, logout, setError],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

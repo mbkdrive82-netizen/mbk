@@ -13,6 +13,16 @@ import DaysGrid from '@/components/college/DaysGrid';
 import { api } from '@/services/api';
 import { notify } from '@/lib/toast';
 import {
+    clearTrainerDashboardScheduleSummaryCache,
+    clearTrainerDashboardSnapshot,
+    signalTrainerDashboardRefresh,
+} from '@/portals/trainer/dashboard/dashboardUtils';
+import {
+    clearTrainerDashboardScheduleSummaryCache,
+    clearTrainerDashboardSnapshot,
+    signalTrainerDashboardRefresh,
+} from '@/portals/trainer/dashboard/dashboardUtils';
+import {
     extractDriveSyncResponseData,
     runDriveSyncDryRunPreview,
 } from './driveSyncPreview';
@@ -659,6 +669,22 @@ const SuperAdminCollegeDetails = () => {
                                 headers: { 'Content-Type': 'multipart/form-data' }
                             });
 
+                        }
+
+                        // Invalidate trainer dashboard caches for affected trainer(s)
+                        const previousTrainerId = selectedDay?.trainerId || selectedDay?.trainer?._id || selectedDay?.trainer?.id;
+                        const currentTrainerId = data.trainerId || previousTrainerId;
+
+                        if (previousTrainerId) {
+                            clearTrainerDashboardScheduleSummaryCache(previousTrainerId);
+                            clearTrainerDashboardSnapshot(previousTrainerId);
+                            signalTrainerDashboardRefresh(previousTrainerId);
+                        }
+
+                        if (currentTrainerId && currentTrainerId !== previousTrainerId) {
+                            clearTrainerDashboardScheduleSummaryCache(currentTrainerId);
+                            clearTrainerDashboardSnapshot(currentTrainerId);
+                            signalTrainerDashboardRefresh(currentTrainerId);
                         }
 
                         // Refresh

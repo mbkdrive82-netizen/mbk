@@ -7,6 +7,12 @@ import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 // import BatchModal from '@/components/BatchModal';
 import DayDetailsModal from '@/components/modals/DayDetailsModal';
 import HierarchySidebar from '@/components/common/HierarchySidebar';
+import {
+  clearTrainerDashboardScheduleSummaryCache,
+  clearTrainerDashboardSnapshot,
+  signalTrainerDashboardRefresh,
+  normalizeTrainerId,
+} from '@/portals/trainer/dashboard/dashboardUtils';
 import HierarchyBreadcrumb from '@/components/common/HierarchyBreadcrumb';
 import { api } from '@/services/api';
 import { notify } from '@/lib/toast';
@@ -18,6 +24,11 @@ const MOCK_COLLEGE = {
     spocPhone: '',
     spocEmail: '',
     course: ''
+};
+
+const resolveTrainerId = (trainerField) => {
+    const normalizedId = normalizeTrainerId(trainerField);
+    return normalizedId || null;
 };
 
 const CollegeDetails = () => {
@@ -463,6 +474,13 @@ const CollegeDetails = () => {
                     try {
                         console.log('Deleting day:', dayId);
                         await api.delete(`/schedules/${dayId}`);
+
+                        const trainerId = resolveTrainerId(selectedDay?.trainerId || selectedDay?.trainer);
+                        if (trainerId) {
+                            clearTrainerDashboardScheduleSummaryCache(trainerId);
+                            clearTrainerDashboardSnapshot(trainerId);
+                            signalTrainerDashboardRefresh(trainerId);
+                        }
 
                         // Refresh
                         const response = await api.get(detailsEndpoint);

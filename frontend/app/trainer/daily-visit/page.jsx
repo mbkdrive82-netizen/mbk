@@ -34,6 +34,7 @@ export default function DailyVisitPage() {
 
   // 1. Assignment Info
   const [assignment, setAssignment] = useState(null);
+  const [assignmentError, setAssignmentError] = useState(null);
   const [distance, setDistance] = useState(null);
   const [isInside, setIsInside] = useState(false);
   const [uploadedFile, setUploadedFile] = useState([]);
@@ -145,28 +146,20 @@ export default function DailyVisitPage() {
 
   const fetchCurrentAssignment = async () => {
     setLoading(true);
+    setAssignmentError(null);
     try {
       const res = await api.get('/teacher/current-assignment');
       if (res.data.success && res.data.assignment) {
         setAssignment(res.data.assignment);
       } else {
-        setAssignment({
-          collegeName: "Default Campus (Bypassed)",
-          collegeId: "default",
-          latitude: coords?.lat || 12.9716,
-          longitude: coords?.lng || 77.5946,
-          geofenceRadius: 9999999
-        });
+        throw new Error(res.data.message || 'No active assignment found');
       }
     } catch (err) {
-      console.warn("No active college assignment found, using default fallback.");
-      setAssignment({
-        collegeName: "Default Campus (Bypassed)",
-        collegeId: "default",
-        latitude: coords?.lat || 12.9716,
-        longitude: coords?.lng || 77.5946,
-        geofenceRadius: 9999999
-      });
+      const message = err.response?.data?.message || err.message || 'Unable to load trainer assignment.';
+      console.error('Failed to load current trainer assignment:', message);
+      setAssignment(null);
+      setAssignmentError(message);
+      toast.error('Unable to load your current assignment. Please contact admin.');
     } finally {
       setLoading(false);
     }
@@ -623,6 +616,28 @@ export default function DailyVisitPage() {
       setLoading(false);
     }
   };
+
+  if (!assignment && !loading) {
+    return (
+      <MainLayout>
+        <section className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8 text-slate-100">
+          <div className="rounded-3xl border border-rose-500/40 bg-slate-950/90 p-8 text-center shadow-xl shadow-rose-500/10">
+            <h1 className="text-3xl font-extrabold tracking-tight text-rose-100">Assignment Required</h1>
+            <p className="mt-4 text-sm leading-6 text-slate-300">
+              {assignmentError || 'Unable to load your current assignment. Please contact your administrator.'}
+            </p>
+            <button
+              type="button"
+              onClick={fetchCurrentAssignment}
+              className="mt-6 inline-flex items-center justify-center rounded-full bg-emerald-500 px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400"
+            >
+              Retry Assignment
+            </button>
+          </div>
+        </section>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout>

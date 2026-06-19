@@ -6,6 +6,11 @@ const scheduleSchema = new mongoose.Schema({
         ref: 'Trainer',
         default: null,
     },
+    batchId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Batch',
+        default: null,
+    },
     companyId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Company',
@@ -231,6 +236,7 @@ scheduleSchema.index({ departmentId: 1, dayNumber: 1 });
 scheduleSchema.index({ trainerId: 1, scheduledDate: 1 });
 scheduleSchema.index({ companyId: 1, courseId: 1, collegeId: 1, departmentId: 1 });
 scheduleSchema.index({ collegeId: 1, scheduledDate: 1, status: 1 });
+scheduleSchema.index({ batchId: 1 });
 scheduleSchema.index({ driveFolderId: 1 }, { sparse: true });
 // Additional indexes for 70K-user dashboard query patterns
 scheduleSchema.index({ trainerId: 1, status: 1, scheduledDate: 1 });        // trainer dashboard

@@ -176,8 +176,7 @@ const CollegeCard = memo(function CollegeCard({
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  const compId = college.companyId?._id || college.companyId || companyId;
-                  router.push(`/dashboard/companies/${compId}/courses/${crsId}/colleges/${cId}`);
+                  router.push(`/dashboard/companies/college/${cId}`);
                 }}
                 className="inline-flex items-center rounded-lg bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 text-xs font-bold text-white transition-colors shadow-sm"
               >

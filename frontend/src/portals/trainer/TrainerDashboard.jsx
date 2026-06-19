@@ -187,12 +187,12 @@ function TrainerDashboard() {
   }, []);
 
   const handleOpenSchedule = useCallback(() => {
-    router.push("/trainer/schedule");
+    router.push("/trainer/dashboard");
   }, [router]);
 
   const handleOpenScheduleDate = useCallback(
     (rawDate) => {
-      router.push(`/trainer/schedule?date=${rawDate || ""}`);
+      router.push(`/trainer/dashboard`);
     },
     [router],
   );
@@ -282,6 +282,13 @@ function TrainerDashboard() {
             >
               View Schedule
               <ArrowRight className="ml-2 h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push('/trainer/daily-visit')}
+              className="inline-flex w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
+            >
+              Trainer Activities
             </button>
             {canViewIdCard ? (
               <button

@@ -9,6 +9,7 @@ import { getTrainerProfile } from "@/services/trainerService";
 
 import {
   buildTrainerDashboardScheduleSummary,
+  buildTrainerDashboardSnapshotKey,
   fetchTrainerDashboardScheduleSummary,
 } from "./dashboardUtils";
 
@@ -18,17 +19,10 @@ const EMPTY_STATS = {
   pending: 0,
   colleges: 0,
 };
-const TRAINER_DASHBOARD_SNAPSHOT_PREFIX = "trainer-dashboard:v2";
 const TRAINER_DASHBOARD_SNAPSHOT_TTL_MS = 30 * 60 * 1000;
 
 const canUseSessionStorage = () =>
   typeof window !== "undefined" && typeof window.sessionStorage !== "undefined";
-
-const buildTrainerDashboardSnapshotKey = (trainerId) => {
-  const normalizedTrainerId = String(trainerId || "").trim();
-  if (!normalizedTrainerId) return "";
-  return `${TRAINER_DASHBOARD_SNAPSHOT_PREFIX}:${normalizedTrainerId}`;
-};
 
 const readTrainerDashboardSnapshot = (snapshotKey) => {
   if (!snapshotKey || !canUseSessionStorage()) {
@@ -168,11 +162,28 @@ export default function useTrainerDashboardData(currentUser) {
     initialData: cachedDashboardSnapshot || undefined,
     staleTime: 90_000,
     gcTime: 5 * 60_000,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
     retry: 1,
     placeholderData: (previousData) => previousData,
   });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const refreshKey = `trainer-dashboard:refresh:${resolvedCurrentUserId}`;
+    const handleStorage = (event) => {
+      if (!event?.key) return;
+      if (event.key === refreshKey || event.key === dashboardSnapshotStorageKey) {
+        void fallbackQuery.refetch();
+      }
+    };
+
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, [dashboardSnapshotStorageKey, fallbackQuery, resolvedCurrentUserId]);
 
   useEffect(() => {
     if (portalDashboard) {

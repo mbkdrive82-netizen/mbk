@@ -30,18 +30,14 @@ const VerifyLocation = ({ onNext }) => {
       return;
     }
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
+      () => {
         // In a real app, verify against allowed radius from backend
         setStatus('ok');
         setTimeout(onNext, 800);
       },
       () => setStatus('error')
     );
-
-
-
-
-  }, []);
+  }, [onNext]);
   return (
     <div className="flex flex-col items-center justify-center h-full">
         <h2 className="text-[#1E293B] text-xl font-semibold mb-4">Step 1 – Verify Current GPS Location</h2>
@@ -87,10 +83,10 @@ const StudentAttendance = ({ onNext }) => (
 
 const StudentActivities = ({ onNext }) => (
   <div className="flex flex-col items-center justify-center h-full">
-        <h2 className="text-[#1E293B] text-xl font-semibold mb-4">Step 4 – Student Activities</h2>
-    <p>Record activities for the day.</p>
+        <h2 className="text-[#1E293B] text-xl font-semibold mb-4">Step 4 – Trainer Activities</h2>
+    <p>Record the trainer activities for the day.</p>
     <button onClick={onNext} className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition">
-      Continue
+      Complete Task
     </button>
   </div>
 );
@@ -131,7 +127,7 @@ const steps = [
   { title: 'Verify Current GPS Location', component: VerifyLocation },
   { title: 'Clock‑In (Geo‑Tagged Image)', component: ClockIn },
   { title: 'Student Attendance', component: StudentAttendance },
-  { title: 'Student Activities', component: StudentActivities },
+  { title: 'Trainer Activities', component: StudentActivities },
   { title: 'Clock‑Out (Geo‑Tagged Image)', component: ClockOut },
   { title: 'Summary', component: Summary },
 ];

@@ -423,6 +423,64 @@ const CheckInModal = ({
                 </button>
               </div>
             ) : null}
+
+            <div className="grid gap-3 sm:grid-cols-3 mt-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Attendance Excel</label>
+                <div className="relative rounded-xl border border-dashed border-gray-300 px-3 py-4 text-center bg-white hover:border-indigo-500 transition-all">
+                  <input
+                    type="file"
+                    accept=".xls,.xlsx"
+                    onChange={(event) =>
+                      setAttendanceData((previous) => ({
+                        ...previous,
+                        attendanceExcel: event.target.files?.[0] || null,
+                      }))}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                  <div className="text-xs text-gray-600">
+                    {attendanceData.attendanceExcel ? attendanceData.attendanceExcel.name : 'Upload Excel'}
+                  </div>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Trainer Signature</label>
+                <div className="relative rounded-xl border border-dashed border-gray-300 px-3 py-4 text-center bg-white hover:border-indigo-500 transition-all">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(event) =>
+                      setAttendanceData((previous) => ({
+                        ...previous,
+                        signature: event.target.files?.[0] || null,
+                      }))}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                  <div className="text-xs text-gray-600">
+                    {attendanceData.signature ? attendanceData.signature.name : 'Upload Signature'}
+                  </div>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Check-In Image</label>
+                <div className="relative rounded-xl border border-dashed border-gray-300 px-3 py-4 text-center bg-white hover:border-indigo-500 transition-all">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={(event) =>
+                      setAttendanceData((previous) => ({
+                        ...previous,
+                        checkInImage: event.target.files?.[0] || null,
+                      }))}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                  <div className="text-xs text-gray-600">
+                    {attendanceData.checkInImage ? attendanceData.checkInImage.name : 'Upload Image'}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="text-xs text-gray-500">

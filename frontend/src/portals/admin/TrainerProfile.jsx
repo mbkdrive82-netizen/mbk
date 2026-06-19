@@ -11,6 +11,7 @@ import { getTrainer, uploadDocument } from '@/services/trainerService';
 import { api, FILE_BASE_URL } from '@/services/api';
 import { notify } from '@/lib/toast';
 import { getProfilePictureUrl } from '@/utils/imageUtils';
+import { clearTrainerDashboardScheduleSummaryCache, clearTrainerDashboardSnapshot, signalTrainerDashboardRefresh } from '@/portals/trainer/dashboard/dashboardUtils';
 import useRenderCountDebug from "@/shared/perf/useRenderCountDebug";
 
 function classNames(...classes) {
@@ -340,6 +341,9 @@ const TrainerProfile = () => {
 
             await scheduleService.createSchedule(scheduleData);
             notify.success('Activity added successfully!');
+            clearTrainerDashboardScheduleSummaryCache(id);
+            clearTrainerDashboardSnapshot(id);
+            signalTrainerDashboardRefresh(id);
             setIsActivityModalOpen(false);
             setNewActivity({
                 company: '',

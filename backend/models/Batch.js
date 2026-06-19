@@ -52,6 +52,19 @@ const batchSchema = new mongoose.Schema({
         enum: ['FN', 'AN', 'Both'],
         default: 'Both',
     },
+    scheduleDayOfWeek: {
+        type: String,
+        enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+        default: null,
+    },
+    scheduleStartTime: {
+        type: String,
+        default: null,
+    },
+    scheduleEndTime: {
+        type: String,
+        default: null,
+    },
     status: {
         type: String,
         enum: ['active', 'completed', 'upcoming'],

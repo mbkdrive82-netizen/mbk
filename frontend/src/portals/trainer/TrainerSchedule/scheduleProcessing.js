@@ -103,7 +103,18 @@ export const getAssignedDateKey = (value) => {
 };
 
 export const getScheduleBadge = (schedule) => {
-  if (schedule.status === "COMPLETED") {
+  const normalizedStatus = normalizeStatus(schedule.status);
+  const normalizedAttendanceStatus = normalizeStatus(schedule.attendanceStatus);
+  const normalizedGeoVerificationStatus = normalizeStatus(schedule.geoVerificationStatus);
+  const normalizedFinalStatus = normalizeStatus(schedule.checkOut?.finalStatus || schedule.finalStatus);
+  const normalizedDayStatus = normalizeStatus(schedule.dayStatus);
+  const hasCompletedCheckOut = (
+    normalizedFinalStatus === "completed"
+    || (normalizedGeoVerificationStatus === "approved" && normalizedAttendanceStatus === "approved")
+    || normalizedDayStatus === "completed"
+  );
+
+  if (schedule.status === "COMPLETED" || normalizedStatus === "completed" || hasCompletedCheckOut) {
     return { label: "Completed", className: "bg-green-100 text-green-800" };
   }
 
@@ -111,15 +122,15 @@ export const getScheduleBadge = (schedule) => {
     return { label: "Check-In Rejected", className: "bg-red-100 text-red-700" };
   }
 
-  if (schedule.geoValidationComment && normalizeStatus(schedule.geoVerificationStatus) !== "approved") {
+  if (schedule.geoValidationComment && normalizedGeoVerificationStatus !== "approved") {
     return { label: "Check-Out Pending", className: "bg-amber-100 text-amber-700" };
   }
 
-  if (schedule.status === "inprogress") {
+  if (normalizedStatus === "inprogress") {
     return { label: "In Progress", className: "bg-yellow-100 text-yellow-800" };
   }
 
-  if (schedule.status === "completed") {
+  if (normalizedStatus === "completed") {
     return {
       label: "Completed",
       className: "bg-blue-50 text-blue-700 border border-blue-100",
@@ -163,7 +174,7 @@ export const buildScheduleUiState = (schedule = {}, referenceDate = new Date()) 
   const isAttendanceRejected = normalizedAttendanceStatus === "rejected";
   const hasCompletedCheckOut = (
     normalizedFinalStatus === "completed"
-    || normalizedGeoVerificationStatus === "approved"
+    || (normalizedGeoVerificationStatus === "approved" && normalizeStatus(schedule.attendanceStatus) === "approved")
     || normalizedDayStatus === "completed"
   );
   const isGeoPending = (
@@ -178,7 +189,9 @@ export const buildScheduleUiState = (schedule = {}, referenceDate = new Date()) 
     && normalizedGeoVerificationStatus !== "approved"
   );
   const isInProgress = normalizedScheduleStatus === "inprogress";
-  const isCompleted = schedule.status === "COMPLETED" || normalizedScheduleStatus === "completed";
+  const isCompleted = schedule.status === "COMPLETED"
+    || normalizedScheduleStatus === "completed"
+    || hasCompletedCheckOut;
   const isScheduleActionable = isScheduleActionableForTrainerWorkflow(schedule);
   const isFutureDate = Boolean(scheduleDay && today && scheduleDay > today);
   const isPastDate = Boolean(scheduleDay && today && scheduleDay < today);

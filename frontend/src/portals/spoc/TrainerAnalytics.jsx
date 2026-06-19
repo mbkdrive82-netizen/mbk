@@ -13,6 +13,7 @@ import { api } from '@/services/api';
 import { notify } from '@/lib/toast';
 import { ArrowDownTrayIcon, DocumentTextIcon, XMarkIcon, CheckCircleIcon, ExclamationTriangleIcon, CloudArrowUpIcon, PencilSquareIcon as SolidPencilSquareIcon, TrashIcon as SolidTrashIcon } from '@heroicons/react/24/solid';
 import { useSocket } from '@/context/SocketContext';
+import { clearTrainerDashboardScheduleSummaryCache, clearTrainerDashboardSnapshot, signalTrainerDashboardRefresh } from '@/portals/trainer/dashboard/dashboardUtils';
 import useRenderCountDebug from "@/shared/perf/useRenderCountDebug";
 
 const DayDetailsModal = dynamic(() => import("@/components/modals/DayDetailsModal"), {
@@ -553,6 +554,12 @@ useEffect(() => {
             await queryClient.invalidateQueries({
                 queryKey: ['spoc', 'trainer-analytics', 'schedules', trainerRouteId],
             });
+
+            if (trainerRouteId) {
+                clearTrainerDashboardScheduleSummaryCache(trainerRouteId);
+                clearTrainerDashboardSnapshot(trainerRouteId);
+                signalTrainerDashboardRefresh(trainerRouteId);
+            }
         } catch (err) {
             console.error('Error deleting schedule:', err);
             notify.error('Failed to delete schedule');

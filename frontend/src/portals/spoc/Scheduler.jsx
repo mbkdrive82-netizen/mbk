@@ -6,6 +6,7 @@ import { Calendar as CalendarIcon } from 'lucide-react';
 import { useSchedulerData } from '@/modules/schedules';
 import { notify } from '@/lib/toast';
 import { runOnIdle } from '@/shared/lib/mainThread';
+import { clearTrainerDashboardScheduleSummaryCache, clearTrainerDashboardSnapshot, signalTrainerDashboardRefresh } from '@/portals/trainer/dashboard/dashboardUtils';
 import SchedulerAssignModalSection from './scheduler/SchedulerAssignModalSection';
 import SchedulerHeaderActions from './scheduler/SchedulerHeaderActions';
 import SchedulerCalendarSection from './scheduler/SchedulerCalendarSection';
@@ -125,7 +126,7 @@ const Scheduler = () => {
         }
     }, [assignData, assignModal.scheduleId, assignSchedule]);
 
-    const handleDelete = useCallback(async (scheduleId) => {
+    const handleDelete = useCallback(async (scheduleId, trainerId) => {
         if (!window.confirm('Are you sure you want to delete this schedule? This action cannot be undone.')) {
             return;
         }
@@ -140,6 +141,11 @@ const Scheduler = () => {
             });
             if (payload?.success !== false) {
                 notify.success('Schedule deleted successfully');
+                if (trainerId) {
+                    clearTrainerDashboardScheduleSummaryCache(trainerId);
+                    clearTrainerDashboardSnapshot(trainerId);
+                    signalTrainerDashboardRefresh(trainerId);
+                }
             }
         } catch (error) {
             console.error('Error deleting schedule:', error);

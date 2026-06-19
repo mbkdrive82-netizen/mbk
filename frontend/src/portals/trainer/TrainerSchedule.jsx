@@ -536,6 +536,10 @@ const TrainerSchedule = ({ initialSelectedMonth }) => {
         checkInTime: '',
         studentsPresent: '',
         studentsAbsent: '',
+        attendancePdf: null,
+        attendanceExcel: null,
+        signature: null,
+        checkInImage: null,
         photo: null
     });
 
@@ -1123,6 +1127,9 @@ const TrainerSchedule = ({ initialSelectedMonth }) => {
             studentsPresent: '',
             studentsAbsent: '',
             attendancePdf: null,
+            attendanceExcel: null,
+            signature: null,
+            checkInImage: null,
             latitude: null,
             longitude: null,
             syllabus: actionableSchedule.subject || '' // Pre-fill with existing subject if available
@@ -1223,8 +1230,8 @@ const TrainerSchedule = ({ initialSelectedMonth }) => {
             return;
         }
 
-        if (!attendanceData.attendancePdf) {
-            showToast('warning', 'Attach the attendance PDF before check-in so the Attendance folder is not left empty.');
+        if (!attendanceData.attendancePdf && !attendanceData.attendanceExcel && !attendanceData.signature && !attendanceData.checkInImage) {
+            showToast('warning', 'Attach attendance evidence (PDF, Excel, signature, or check-in image) before check-in so the Attendance folder is not left empty.');
             return;
         }
 
@@ -1281,6 +1288,15 @@ const TrainerSchedule = ({ initialSelectedMonth }) => {
 
             if (attendanceData.attendancePdf) {
                 formData.append('attendancePdf', attendanceData.attendancePdf);
+            }
+            if (attendanceData.attendanceExcel) {
+                formData.append('attendanceExcel', attendanceData.attendanceExcel);
+            }
+            if (attendanceData.signature) {
+                formData.append('signature', attendanceData.signature);
+            }
+            if (attendanceData.checkInImage) {
+                formData.append('check_in_image', attendanceData.checkInImage);
             }
 
             const response = await api.post('/attendance/check-in', formData);

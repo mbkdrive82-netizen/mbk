@@ -23,16 +23,23 @@ function escapeRegExp(string) {
 }
 
 async function getActiveAssignment(trainer, reqUser) {
-  const trainerName = trainer.firstName && trainer.lastName 
-    ? `${trainer.firstName} ${trainer.lastName}` 
-    : (trainer.userId?.name || reqUser.name || "");
+  const trainerName = trainer.firstName && trainer.lastName
+    ? `${trainer.firstName} ${trainer.lastName}`
+    : (trainer.userId?.name || trainer.email || reqUser.name || "");
 
   if (!trainerName) return null;
 
-  let assignment = await TrainerAssignment.findOne({
-    trainerName: { $regex: new RegExp("^" + escapeRegExp(trainerName) + "$", "i") },
-    active: true
-  });
+  const assignmentQuery = { active: true };
+  if (trainer._id) {
+    assignmentQuery.$or = [
+      { trainerid: String(trainer._id) },
+      { trainerName: { $regex: new RegExp("^" + escapeRegExp(trainerName) + "$", "i") } }
+    ];
+  } else {
+    assignmentQuery.trainerName = { $regex: new RegExp("^" + escapeRegExp(trainerName) + "$", "i") };
+  }
+
+  let assignment = await TrainerAssignment.findOne(assignmentQuery);
 
   if (!assignment) {
     // Fallback/Auto-Backfill: Check if trainer has a collegeId or is linked to a college
@@ -46,7 +53,10 @@ async function getActiveAssignment(trainer, reqUser) {
     if (college) {
       assignment = await TrainerAssignment.create({
         trainerName,
+        trainerid: String(trainer._id),
+        trainername: trainerName,
         collegeName: college.name,
+        collegename: college.name,
         active: true
       });
     }
@@ -74,9 +84,13 @@ async function getActiveAssignment(trainer, reqUser) {
     return null;
   }
 
-  const college = await College.findOne({
+  let college = await College.findOne({
     name: { $regex: new RegExp("^" + escapeRegExp(assignment.collegeName) + "$", "i") }
   });
+
+  if (!college && trainer.collegeId) {
+    college = await College.findById(trainer.collegeId);
+  }
 
   return {
     assignment,

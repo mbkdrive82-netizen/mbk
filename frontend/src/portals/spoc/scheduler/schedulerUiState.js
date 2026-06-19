@@ -26,10 +26,29 @@ export const createAssignClickHandler =
   () =>
     onOpenAssignModal(schedule);
 
+const resolveTrainerId = (schedule) => {
+  const trainerField = schedule?.trainerId || schedule?.trainer;
+  if (!trainerField) return null;
+  if (typeof trainerField === 'string' || typeof trainerField === 'number') {
+    return String(trainerField).trim();
+  }
+  return (
+    trainerField._id ||
+    trainerField.id ||
+    trainerField.trainerId ||
+    trainerField.userId?.id ||
+    trainerField.userId?._id ||
+    null
+  );
+};
+
 export const createDeleteClickHandler =
   ({ schedule, onDeleteSchedule }) =>
   () =>
-    onDeleteSchedule(resolveScheduleId(schedule));
+    onDeleteSchedule(
+      resolveScheduleId(schedule),
+      resolveTrainerId(schedule),
+    );
 
 export const normalizeAssignPayload = (assignData = {}) => ({
   trainerId: String(assignData.trainerId || "").trim(),

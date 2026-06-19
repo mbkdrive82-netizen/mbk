@@ -4,7 +4,28 @@ const DASHBOARD_SCHEDULE_SUMMARY_TTL_MS = 45_000;
 const trainerScheduleSummaryCache = new Map();
 const trainerScheduleSummaryInFlight = new Map();
 
-const getTrainerSummaryCacheKey = (trainerId) => String(trainerId || "").trim();
+const canUseSessionStorage = () =>
+  typeof window !== "undefined" && typeof window.sessionStorage !== "undefined";
+
+export const normalizeTrainerId = (trainerId) => {
+  if (!trainerId) return "";
+  if (typeof trainerId === "string" || typeof trainerId === "number") {
+    return String(trainerId).trim();
+  }
+  if (typeof trainerId === "object") {
+    return String(
+      trainerId._id ||
+      trainerId.id ||
+      trainerId.trainerId ||
+      trainerId.userId?.id ||
+      trainerId.userId?._id ||
+      "",
+    ).trim();
+  }
+  return String(trainerId).trim();
+};
+
+const getTrainerSummaryCacheKey = (trainerId) => normalizeTrainerId(trainerId);
 
 export const buildScheduleItem = (schedule = {}) => ({
   id: schedule?._id || schedule?.id,
@@ -23,6 +44,35 @@ export const buildScheduleItem = (schedule = {}) => ({
   dayNumber: schedule?.dayNumber || "N/A",
   status: schedule?.attendanceStatus || schedule?.status || "pending",
 });
+
+export const buildTrainerDashboardSnapshotKey = (trainerId) => {
+  const normalizedTrainerId = normalizeTrainerId(trainerId);
+  if (!normalizedTrainerId) return "";
+  return `trainer-dashboard:v2:${normalizedTrainerId}`;
+};
+
+export const clearTrainerDashboardScheduleSummaryCache = (trainerId) => {
+  const cacheKey = normalizeTrainerId(trainerId);
+  if (!cacheKey) return;
+  trainerScheduleSummaryCache.delete(cacheKey);
+};
+
+export const clearTrainerDashboardSnapshot = (trainerId) => {
+  const normalizedTrainerId = normalizeTrainerId(trainerId);
+  if (!normalizedTrainerId || !canUseSessionStorage()) return;
+
+  const snapshotKey = buildTrainerDashboardSnapshotKey(normalizedTrainerId);
+  window.sessionStorage.removeItem(snapshotKey);
+};
+
+export const signalTrainerDashboardRefresh = (trainerId) => {
+  const normalizedTrainerId = normalizeTrainerId(trainerId);
+  if (!normalizedTrainerId) return;
+
+  const refreshKey = `trainer-dashboard:refresh:${normalizedTrainerId}`;
+  if (typeof window === "undefined" || typeof window.localStorage === "undefined") return;
+  window.localStorage.setItem(refreshKey, String(Date.now()));
+};
 
 export const getStatusMeta = (status = "") => {
   const normalized = String(status || "").trim().toLowerCase();

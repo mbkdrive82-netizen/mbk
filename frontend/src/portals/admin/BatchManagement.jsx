@@ -45,6 +45,9 @@ const BatchManagement = () => {
     const [sessionType, setSessionType] = useState('Both');
     const [endSessionType, setEndSessionType] = useState('Both');
     const [status, setStatus] = useState('active');
+    const [scheduleDayOfWeek, setScheduleDayOfWeek] = useState('Monday');
+    const [scheduleStartTime, setScheduleStartTime] = useState('09:00');
+    const [scheduleEndTime, setScheduleEndTime] = useState('17:00');
     const [selectedTrainers, setSelectedTrainers] = useState([]);
 
     // Student Assignment State
@@ -162,6 +165,9 @@ const BatchManagement = () => {
         setSessionType('Both');
         setEndSessionType('Both');
         setStatus('active');
+        setScheduleDayOfWeek('Monday');
+        setScheduleStartTime('09:00');
+        setScheduleEndTime('17:00');
         setSelectedTrainers([]);
         setEditingBatch(null);
     };
@@ -181,6 +187,9 @@ const BatchManagement = () => {
         setSessionType(batch.sessionType || 'Both');
         setEndSessionType(batch.endSessionType || 'Both');
         setStatus(batch.status || 'active');
+        setScheduleDayOfWeek(batch.scheduleDayOfWeek || 'Monday');
+        setScheduleStartTime(batch.scheduleStartTime || '09:00');
+        setScheduleEndTime(batch.scheduleEndTime || '17:00');
         setSelectedTrainers(batch.trainerIds?.map(t => t._id || t) || []);
         setIsBatchModalOpen(true);
     };
@@ -204,6 +213,9 @@ const BatchManagement = () => {
             sessionType,
             endSessionType,
             status,
+            scheduleDayOfWeek,
+            scheduleStartTime,
+            scheduleEndTime,
             trainerIds: selectedTrainers
         };
         saveBatchMutation.mutate(payload);
@@ -600,6 +612,43 @@ const BatchManagement = () => {
                                         <option value="completed">Completed</option>
                                         <option value="upcoming">Upcoming</option>
                                     </select>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Schedule Day</label>
+                                    <select
+                                        value={scheduleDayOfWeek}
+                                        onChange={(e) => setScheduleDayOfWeek(e.target.value)}
+                                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                                    >
+                                        <option value="Monday">Monday</option>
+                                        <option value="Tuesday">Tuesday</option>
+                                        <option value="Wednesday">Wednesday</option>
+                                        <option value="Thursday">Thursday</option>
+                                        <option value="Friday">Friday</option>
+                                        <option value="Saturday">Saturday</option>
+                                        <option value="Sunday">Sunday</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Start Time</label>
+                                    <input
+                                        type="time"
+                                        value={scheduleStartTime}
+                                        onChange={(e) => setScheduleStartTime(e.target.value)}
+                                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">End Time</label>
+                                    <input
+                                        type="time"
+                                        value={scheduleEndTime}
+                                        onChange={(e) => setScheduleEndTime(e.target.value)}
+                                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                                    />
                                 </div>
                             </div>
 
