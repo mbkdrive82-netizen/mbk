@@ -657,15 +657,22 @@ export const AuthProvider = ({ children }) => {
     setError(null);
     try {
       await authService.logout();
-      setUser(null);
-      setUserRole(null);
-      setIsAuthenticated(false);
     } catch {
-      // Ignore logout failures and ensure redirect on caller side.
+      // Ignore logout failures and still send the user home.
     }
+    // Navigate home BEFORE clearing React auth state. If we flipped
+    // isAuthenticated to false first, ProtectedRoute would re-render into an
+    // unauthenticated state while still on a protected route (e.g. /company/*)
+    // and bounce the user to that portal's login page ("Corporate
+    // Registration") instead of the home page. A hard redirect unloads the SPA
+    // and re-initialises auth cleanly on the landing page.
     if (typeof window !== 'undefined') {
       window.location.replace('/');
+      return;
     }
+    setUser(null);
+    setUserRole(null);
+    setIsAuthenticated(false);
   };
 
   const value = useMemo(

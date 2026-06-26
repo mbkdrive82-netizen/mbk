@@ -939,6 +939,8 @@ const createScheduleFeed = async ({
     startTime,
     endTime,
     subject,
+    venue,
+    remarks,
     createdBy: payloadCreatedBy,
   } = payload;
 
@@ -983,6 +985,8 @@ const createScheduleFeed = async ({
       startTime,
       endTime,
       subject,
+      venue,
+      remarks,
       createdBy,
       status: "scheduled",
       ...(folderFields || {}),

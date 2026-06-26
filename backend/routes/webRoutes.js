@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const nodemailer = require('nodemailer');
-const { WebCourse, WebRegistration, WebMessage, AnalyticsEvent } = require('../models');
+const { Course, WebCourse, WebRegistration, WebMessage, AnalyticsEvent } = require('../models');
 
 // @route   POST /api/web/track
 // @desc    Capture analytics events
@@ -56,8 +56,38 @@ const transporter = nodemailer.createTransport({
 // @desc    Get all active courses for public site
 router.get('/courses', async (req, res) => {
     try {
-        const courses = await WebCourse.find({ status: 'Active' }).sort({ createdAt: -1 });
-        res.json(courses);
+        const [webCourses, adminCourses] = await Promise.all([
+            WebCourse.find({ status: 'Active' }).sort({ createdAt: -1 }).lean(),
+            Course.find({ isActive: { $ne: false } }).sort({ createdAt: -1 }).lean(),
+        ]);
+
+        const normalizedCourses = [];
+        const seenTitles = new Set();
+        const seenIds = new Set();
+
+        const addCourse = (course) => {
+            const id = String(course._id || course.id || '').trim();
+            const title = String(course.title || course.name || course.label || '').trim();
+            const normalizedTitle = title.toLowerCase();
+
+            if (!id || !title) {
+                return;
+            }
+            if (seenIds.has(id) || (normalizedTitle && seenTitles.has(normalizedTitle))) {
+                return;
+            }
+
+            seenIds.add(id);
+            if (normalizedTitle) {
+                seenTitles.add(normalizedTitle);
+            }
+            normalizedCourses.push(course);
+        };
+
+        webCourses.forEach(addCourse);
+        adminCourses.forEach(addCourse);
+
+        res.json(normalizedCourses);
     } catch (err) {
         console.error('Error fetching web courses:', err && err.stack ? err.stack : err);
         res.status(500).json({ 
@@ -79,8 +109,13 @@ router.post('/register', async (req, res) => {
 
         let courseName = 'General Training';
         if (courseId) {
-            const course = await WebCourse.findById(courseId);
-            if (course) courseName = course.title;
+            let course = await WebCourse.findById(courseId);
+            if (!course) {
+                course = await Course.findById(courseId);
+            }
+            if (course) {
+                courseName = course.title;
+            }
         }
 
         // Notify Admin

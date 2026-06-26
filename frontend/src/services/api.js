@@ -13,13 +13,30 @@ import {
 } from "@/lib/authErrorHandler";
 
 const cleanBaseUrl = getApiOrigin();
-const hasExplicitOrigin = Boolean(
+// Treat explicit origin carefully: prefer the Next.js proxy when the configured
+// origin points at localhost and the app is running in the browser on localhost.
+let hasExplicitOrigin = Boolean(
   (process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_BASE_URL || process.env.API_ORIGIN || "").trim(),
 );
+if (hasExplicitOrigin && typeof window !== "undefined") {
+  try {
+    const parsed = new URL(cleanBaseUrl || "http://localhost");
+    const originIsLocalhost = ["localhost", "127.0.0.1"].includes(parsed.hostname);
+    const runningOnLocalhost = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+    // If both the configured origin and the browser are on localhost, prefer
+    // the Next.js `/api` proxy unless the env explicitly forces bypass.
+    if (originIsLocalhost && runningOnLocalhost && process.env.NEXT_PUBLIC_FORCE_EXPLICIT_ORIGIN !== "true") {
+      hasExplicitOrigin = false;
+    }
+  } catch {
+    // ignore and respect the original flag
+  }
+}
 
 // Use explicit origin when configured; otherwise proxy via Next.js /api rewrite in dev
 export const API_BASE_URL = hasExplicitOrigin ? getApiBaseUrl() : "/api";
-export const FILE_BASE_URL = cleanBaseUrl || "";
+// FILE_BASE_URL should only be set if an explicit origin is configured; otherwise always use the proxy
+export const FILE_BASE_URL = hasExplicitOrigin ? cleanBaseUrl : "";
 const API_DEBUG = process.env.NEXT_PUBLIC_ENABLE_API_DEBUG === "true";
 const debugLog = (...args) => {
   if (API_DEBUG) {
@@ -55,6 +72,17 @@ const getLocalhostPortFallbackUrls = (requestUrl) => {
     const host = parsedUrl.hostname?.toLowerCase();
     const isLocalHost = host === "localhost" || host === "127.0.0.1";
     if (!isLocalHost) return [];
+
+    if (
+      typeof window !== "undefined" &&
+      parsedUrl.pathname.startsWith("/api/") &&
+      parsedUrl.hostname === window.location.hostname &&
+      (parsedUrl.port === window.location.port || (parsedUrl.port === "" && window.location.port === ""))
+    ) {
+      // When the browser is already requesting the local Next.js /api proxy,
+      // do not retry on backend fallback ports from the client side.
+      return [];
+    }
 
     const urls = [];
     const pushUrl = (port) => {

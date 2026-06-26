@@ -45,6 +45,8 @@ export default function CompanyAuthPage() {
     password: '',
     confirmPassword: '',
   });
+  const [isMobileLayout, setIsMobileLayout] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
     if (!isRouterReady || authLoading || loading) return;
@@ -64,6 +66,15 @@ export default function CompanyAuthPage() {
     safeReplace,
     userRole,
   ]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mediaQuery = window.matchMedia('(max-width: 900px)');
+    const updateMobileLayout = () => setIsMobileLayout(mediaQuery.matches);
+    updateMobileLayout();
+    mediaQuery.addEventListener('change', updateMobileLayout);
+    return () => mediaQuery.removeEventListener('change', updateMobileLayout);
+  }, []);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -125,6 +136,7 @@ export default function CompanyAuthPage() {
       return;
     }
 
+    setErrorMessage('');
     const validationError = validateCompanySignup(formData, { requireAdminName: true });
     if (validationError) {
       notify.warning(validationError);
@@ -146,15 +158,25 @@ export default function CompanyAuthPage() {
     const result = await registerCompany(submissionPayload);
 
     if (result.success && authService.getValidToken()) {
+      setErrorMessage('');
       await notify.successAndNavigate('Company Registration Successful', () =>
         safePush('/company/dashboard'),
       );
-    } else if (result.status === 409) {
-      notify.error(
-        'This email is already registered. Use Sign In or Forgot Password to access your account.',
-      );
     } else {
-      notify.error(result.message || 'An error occurred during registration.');
+      let message =
+        result.message ||
+        'An error occurred during registration. Please verify your details and try again.';
+      if (result.status === 409) {
+        if (result.field === 'email') {
+          message = 'This email is already registered. Use Sign In or Forgot Password to recover access.';
+        } else if (result.field === 'phone') {
+          message = 'This phone number is already registered. Use Sign In or Forgot Password to recover access.';
+        }
+      }
+      setErrorMessage(message);
+      setLoading(false);
+      notify.error(message);
+      return;
     }
     setLoading(false);
   };
@@ -165,19 +187,21 @@ export default function CompanyAuthPage() {
 
   return (
     <div style={styles.pageContainer}>
-      <div style={styles.mainCard}>
-        <div style={styles.leftSidebar}>
-          <h1 style={styles.sidebarTitle}>Partner With Us</h1>
-          <p style={styles.sidebarSub}>
-            Join thousands of corporate partners connecting through MBK Carrierz.
-            Recruit top talent and provide industry training.
-          </p>
-          <div style={styles.bulletList}>
-            <div style={styles.bulletItem}>✓ Verified Student Profiles</div>
-            <div style={styles.bulletItem}>✓ Manage Placement Pipelines</div>
-            <div style={styles.bulletItem}>✓ Drive Corporate Innovation</div>
+      <div style={{ ...styles.mainCard, flexDirection: isMobileLayout ? 'column' : 'row' }}>
+        {!isMobileLayout && (
+          <div style={styles.leftSidebar}>
+            <h1 style={styles.sidebarTitle}>Partner With Us</h1>
+            <p style={styles.sidebarSub}>
+              Join thousands of corporate partners connecting through MBK Carrierz.
+              Recruit top talent and provide industry training.
+            </p>
+            <div style={styles.bulletList}>
+              <div style={styles.bulletItem}>✓ Verified Student Profiles</div>
+              <div style={styles.bulletItem}>✓ Manage Placement Pipelines</div>
+              <div style={styles.bulletItem}>✓ Drive Corporate Innovation</div>
+            </div>
           </div>
-        </div>
+        )}
 
         <div style={styles.rightFormSection}>
           <h2 style={styles.formTitle}>
@@ -190,6 +214,9 @@ export default function CompanyAuthPage() {
           </p>
 
           <form method="post" action="/company/auth" onSubmit={handleAuthSubmit} style={styles.formControl} noValidate>
+            {errorMessage ? (
+              <div style={styles.errorBox}>{errorMessage}</div>
+            ) : null}
             {!isLoginMode && (
               <>
                 <input type="text" name="companyName" placeholder="Company Name *" value={formData.companyName} onChange={handleInputChange} style={styles.inputField} required minLength={2} maxLength={200} disabled={loading} />
@@ -251,6 +278,7 @@ export default function CompanyAuthPage() {
             <span style={styles.toggleLink} onClick={() => {
               if (loading) return;
               setIsLoginMode(!isLoginMode);
+              setErrorMessage('');
               setShowPassword(false);
               setShowConfirmPassword(false);
             }}>
@@ -276,6 +304,7 @@ const styles = {
   formTitle: { fontSize: 'clamp(22px, 4vw, 28px)', fontWeight: '700', color: '#0f172a', marginBottom: '8px' },
   formSub: { fontSize: '14px', color: '#64748b', marginBottom: '28px' },
   formControl: { display: 'flex', flexDirection: 'column', gap: '14px' },
+  errorBox: { width: '100%', borderRadius: '16px', border: '1px solid #fecaca', backgroundColor: '#fef2f2', color: '#991b1b', padding: '14px 16px', marginBottom: '8px', fontSize: '14px' },
   inputField: { width: '100%', padding: '14px 16px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', boxSizing: 'border-box' },
   passwordField: { width: '100%', padding: '14px 44px 14px 16px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', boxSizing: 'border-box' },
   submitButton: { width: '100%', padding: '15px', background: '#3b82f6', color: '#ffffff', border: 'none', borderRadius: '12px', fontSize: '16px', fontWeight: '600', cursor: 'pointer', marginTop: '8px' },

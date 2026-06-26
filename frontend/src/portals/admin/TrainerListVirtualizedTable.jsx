@@ -6,6 +6,7 @@ import { List } from "react-window";
 import { getCoreRowModel, useReactTable } from "@tanstack/react-table";
 
 import { getDocumentStatusMeta } from "@/utils/trainerDocumentWorkflow";
+import { failedImageUrls, markImageUrlFailed } from "@/utils/imageUtils";
 
 const FULL_GRID_TEMPLATE =
   "96px minmax(240px,1.2fr) minmax(240px,1fr) minmax(220px,0.9fr) 184px";
@@ -82,7 +83,17 @@ const VirtualizedTrainerRow = memo(function VirtualizedTrainerRow({
   const row = rowModel.original;
   const statusMeta = getDocumentStatusMeta(row.workflow.documentStatus);
   const imageLoadErrorIndex = imageLoadError[row.id] || 0;
-  const previewImage = row.previewImageCandidates?.[imageLoadErrorIndex] || null;
+  // Pick the first candidate at/after the current index that hasn't already failed
+  // this session. This prevents re-requesting dead URLs (404/blocked) every time a
+  // virtualized row scrolls back into view.
+  const candidateList = row.previewImageCandidates || [];
+  let previewImage = null;
+  for (let i = imageLoadErrorIndex; i < candidateList.length; i += 1) {
+    if (!failedImageUrls.has(candidateList[i])) {
+      previewImage = candidateList[i];
+      break;
+    }
+  }
   const isClickable = row.sourceType === "trainer";
   const accountStatusMeta = getAccountStatusMeta(row);
   const handleMouseEnter = () => {
@@ -120,7 +131,15 @@ const VirtualizedTrainerRow = memo(function VirtualizedTrainerRow({
               src={previewImage}
               alt={row.displayName}
               loading="lazy"
-              onError={() => onImageError(row.id, imageLoadErrorIndex + 1)}
+              onError={() => {
+                // Remember this URL as dead so it is never requested again this
+                // session, then advance to the next candidate. When all candidates
+                // fail the row quietly falls back to the initials avatar. We do NOT
+                // log/toast here to avoid console/UI noise for trainers whose photo
+                // simply isn't available.
+                markImageUrlFailed(previewImage);
+                if (typeof onImageError === 'function') onImageError(row.id, imageLoadErrorIndex + 1);
+              }}
             />
           ) : (
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600 font-calibri text-lg font-black uppercase text-white shadow-inner transition-all group-hover:bg-indigo-700">

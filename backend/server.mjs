@@ -162,7 +162,13 @@ app.use(compression({
     return compression.filter(req, res);
   }
 }));
-app.use(helmet());
+// Allow the separate frontend origin (e.g. :3000) to embed images/files served
+// by this API in <img> tags. Helmet's default Cross-Origin-Resource-Policy is
+// "same-origin", which makes the browser block cross-origin asset loads with
+// ERR_BLOCKED_BY_RESPONSE.NotSameOrigin.
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+}));
 app.use(rateLimiter);
 app.use(requestLogger);
 app.use(express.json({ limit: '10mb' }));   // Uploads use Multer streams; 10MB is enough for JSON
@@ -221,6 +227,77 @@ const uploadsStaticOptions = {
   }
 };
 
+// Secure file serving for trainer documents.
+// Accepts optional `?token=<JWT>` query parameter. If REQUIRE_UPLOAD_AUTH=true,
+// requests without a valid token are rejected. Otherwise files may be served publicly.
+import fs from 'fs';
+import jwt from 'jsonwebtoken';
+const REQUIRE_UPLOAD_AUTH = String(process.env.REQUIRE_UPLOAD_AUTH || '').toLowerCase() === 'true';
+const JWT_SECRET = process.env.JWT_SECRET || "your_super_secret_jwt_key_change_in_production";
+
+const extractDriveFileId = (value) => {
+  if (!value || typeof value !== 'string') return null;
+  const patterns = [/\/file\/d\/([^/?#]+)/i, /\/d\/([^/?#]+)/i, /[?&]id=([^&#]+)/i];
+  for (const pattern of patterns) {
+    const match = value.match(pattern);
+    if (match?.[1]) return decodeURIComponent(match[1]);
+  }
+  return null;
+};
+
+app.get('/api/uploads/trainer-documents/:filename', async (req, res, next) => {
+  const { filename } = req.params || {};
+
+  // Let the SPA (separate origin) embed this asset in <img> tags.
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+
+  // If token provided via query, validate it and attach user
+  if (req.query && req.query.token) {
+    try {
+      const decoded = jwt.verify(String(req.query.token), JWT_SECRET);
+      req.user = { ...decoded, id: decoded.id || decoded.userId, userId: decoded.userId || decoded.id };
+    } catch (err) {
+      return res.status(401).json({ success: false, message: 'Invalid token' });
+    }
+  } else if (REQUIRE_UPLOAD_AUTH) {
+    return res.status(401).json({ success: false, message: 'Authentication required' });
+  }
+
+  const filePath = path.join(uploadsDir, 'trainer-documents', filename);
+  if (fs.existsSync(filePath)) {
+    return res.sendFile(filePath, (err) => {
+      if (err) {
+        console.error('Failed to send trainer document file:', err);
+        if (!res.headersSent) {
+          res.status(500).json({ success: false, message: 'Failed to send file' });
+        }
+      }
+    });
+  }
+
+  // Local file missing (most documents now live on Google Drive). Resolve the
+  // canonical Drive copy by filename and redirect there so the <img> still loads
+  // instead of producing a noisy, repeating 404.
+  try {
+    const TrainerDocument = require('./models/TrainerDocument.js');
+    const doc = await TrainerDocument.findOne({ fileName: filename })
+      .select('driveFileId driveViewLink driveDownloadLink')
+      .lean();
+    const driveId =
+      doc?.driveFileId ||
+      extractDriveFileId(doc?.driveViewLink) ||
+      extractDriveFileId(doc?.driveDownloadLink);
+    if (driveId) {
+      return res.redirect(302, `https://lh3.googleusercontent.com/d/${driveId}=w1200`);
+    }
+  } catch (e) {
+    console.warn('trainer-document Drive fallback failed:', e?.message);
+  }
+
+  return res.status(404).json({ success: false, message: 'File not found' });
+});
+
+// Serve static uploads (fallback for other upload types)
 app.use('/uploads', express.static(uploadsDir, uploadsStaticOptions));
 // Backward-compatible alias for clients using API base URL + file path.
 app.use('/api/uploads', express.static(uploadsDir, uploadsStaticOptions));

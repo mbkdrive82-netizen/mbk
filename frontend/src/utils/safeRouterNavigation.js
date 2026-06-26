@@ -9,8 +9,15 @@ const ROUTER_READY_TIMEOUT_MS = 5000;
 
 let routerReadyPromise = null;
 
+// The App Router client is usable once the document is "interactive"
+// (DOM parsed + hydration can run) — we do NOT need to wait for the full
+// "complete"/load event (all images/fonts/etc.). Waiting for full load made
+// post-login redirects linger on heavy pages (e.g. the landing page) for
+// seconds before navigating. Any genuine "router not ready" error is still
+// caught and retried by runDeferred below.
 const isDocumentComplete = () =>
-  typeof document !== 'undefined' && document.readyState === 'complete';
+  typeof document !== 'undefined' &&
+  (document.readyState === 'interactive' || document.readyState === 'complete');
 
 export const isRouterNotReadyError = (error) =>
   String(error?.message || error).includes(ROUTER_NOT_READY);
@@ -52,10 +59,14 @@ export const waitForAppRouterReady = () => {
     }
 
     const onReady = () => {
+      document.removeEventListener('DOMContentLoaded', onReady);
       window.removeEventListener('load', onReady);
       finish();
     };
 
+    // Resolve as soon as the DOM is parsed (interactive) instead of waiting for
+    // every sub-resource to finish downloading.
+    document.addEventListener('DOMContentLoaded', onReady, { once: true });
     window.addEventListener('load', onReady, { once: true });
 
     const startedAt = Date.now();

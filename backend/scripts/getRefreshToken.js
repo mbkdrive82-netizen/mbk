@@ -3,14 +3,21 @@ require("dotenv").config();
 const { google } = require("googleapis");
 const readline = require("readline");
 
-const CLIENT_ID = process.env.GOOGLE_DRIVE_CLIENT_ID;
-const CLIENT_SECRET = process.env.GOOGLE_DRIVE_CLIENT_SECRET;
+const CLIENT_ID =
+  process.env.GOOGLE_DRIVE_CLIENT_ID ||
+  process.env.GOOGLE_OAUTH_CLIENT_ID ||
+  process.env.GOOGLE_CLIENT_ID;
+const CLIENT_SECRET =
+  process.env.GOOGLE_DRIVE_CLIENT_SECRET ||
+  process.env.GOOGLE_OAUTH_CLIENT_SECRET ||
+  process.env.GOOGLE_CLIENT_SECRET;
 const REDIRECT_URI =
   process.env.GOOGLE_DRIVE_OAUTH_REDIRECT_URI ||
+  process.env.GOOGLE_OAUTH_REDIRECT_URL ||
   "http://localhost:5001/oauth2callback";
 
 if (!CLIENT_ID || !CLIENT_SECRET || !REDIRECT_URI) {
-  console.error("Missing Google OAuth config.");
+  console.error("Missing Google OAuth config. Set CLIENT_ID, CLIENT_SECRET, and REDIRECT_URI env vars.");
   process.exit(1);
 }
 

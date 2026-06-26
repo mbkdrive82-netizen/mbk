@@ -4,9 +4,9 @@ import { AUTH_ROLES, normalizeAuthRole, normalizeAuthUser } from "@/utils/authRo
 let portalDataSnapshot = null;
 let portalDataPromise = null;
 const PORTAL_DATA_STORAGE_KEY = "mbk_portal_data_bundle_v2";
-const PORTAL_DATA_STORAGE_VERSION = 3;
-const PORTAL_DATA_CACHE_TTL_MS = 15 * 60 * 1000;
-const CORE_DASHBOARD_BUNDLE_ENDPOINT = "/dashboard-data?scope=core";
+const PORTAL_DATA_STORAGE_VERSION = 4;
+const PORTAL_DATA_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour cache
+const CORE_DASHBOARD_BUNDLE_ENDPOINT = "/dashboard-data?scope=minimal";
 
 const clonePortalDataBundle = (bundle) => {
   if (bundle === null || typeof bundle !== "object") {
@@ -175,35 +175,40 @@ export const primePortalResourceCache = (bundle) => {
     return;
   }
 
-  const primeFn = () => {
-    // Slice modernization: Process large maps in chunks to avoid frame drops
-    const entries = Object.entries(resources);
-    const CHUNK_SIZE = 50;
-    let index = 0;
+  const entries = Object.entries(resources);
+  if (entries.length === 0) return;
 
-    const processChunk = () => {
-      const chunk = entries.slice(index, index + CHUNK_SIZE);
-      chunk.forEach(([endpoint, data]) => {
-        if (!endpoint) return;
-        api.primeCache(endpoint, data);
-      });
-      index += CHUNK_SIZE;
-      if (index < entries.length) {
-        if (typeof window !== "undefined" && "requestIdleCallback" in window) {
-          window.requestIdleCallback(processChunk);
-        } else {
-          setTimeout(processChunk, 10);
+  // Prime only FIRST 10 resources immediately (critical path)
+  const critical = entries.slice(0, 10);
+  critical.forEach(([endpoint, data]) => {
+    if (!endpoint) return;
+    api.primeCache(endpoint, data);
+  });
+
+  // Lazy load remaining resources after 2 seconds in background
+  if (entries.length > 10) {
+    setTimeout(() => {
+      let index = 10;
+      const CHUNK_SIZE = 20;
+
+      const loadChunk = () => {
+        const chunk = entries.slice(index, index + CHUNK_SIZE);
+        chunk.forEach(([endpoint, data]) => {
+          if (!endpoint) return;
+          api.primeCache(endpoint, data);
+        });
+        index += CHUNK_SIZE;
+        if (index < entries.length) {
+          if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+            window.requestIdleCallback(loadChunk);
+          } else {
+            setTimeout(loadChunk, 50);
+          }
         }
-      }
-    };
+      };
 
-    processChunk();
-  };
-
-  if (typeof window !== "undefined" && "requestIdleCallback" in window) {
-    window.requestIdleCallback(primeFn, { timeout: 2000 });
-  } else {
-    setTimeout(primeFn, 50);
+      loadChunk();
+    }, 2000);
   }
 };
 

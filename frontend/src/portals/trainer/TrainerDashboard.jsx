@@ -136,10 +136,25 @@ function TrainerDashboard() {
 
   useEffect(() => {
     if (!hasMounted) return undefined;
-    getTrainerDashboardAnalytics()
-      .then((res) => setPortalAnalytics(res?.data || res))
-      .catch(() => setPortalAnalytics(null));
-    return undefined;
+
+    const loadAnalytics = () => {
+      getTrainerDashboardAnalytics()
+        .then((res) => setPortalAnalytics(res?.data || res))
+        .catch(() => setPortalAnalytics(null));
+    };
+
+    loadAnalytics();
+
+    const onFocus = () => loadAnalytics();
+    window.addEventListener("focus", onFocus);
+
+    // Poll lightly so a freshly assigned college appears without a full reload.
+    const pollId = window.setInterval(loadAnalytics, 60_000);
+
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      window.clearInterval(pollId);
+    };
   }, [hasMounted]);
 
   useEffect(() => {

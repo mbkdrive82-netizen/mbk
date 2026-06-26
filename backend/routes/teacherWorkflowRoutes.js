@@ -7,6 +7,7 @@ const haversine = require("haversine-distance");
 const xlsx = require("xlsx");
 const { authenticate } = require("../middleware/auth");
 const { Trainer, College, Attendance, StudentActivity, Student, TrainerAssignment } = require("../models");
+const { getActiveAssignment } = require("../utils/trainerAssignmentResolver");
 const { uploadAttendance } = require("../config/upload");
 
 // helper to calculate distance in meters
@@ -20,82 +21,6 @@ function getDistanceInMeters(lat1, lng1, lat2, lng2) {
 function escapeRegExp(string) {
   if (!string) return "";
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-async function getActiveAssignment(trainer, reqUser) {
-  const trainerName = trainer.firstName && trainer.lastName
-    ? `${trainer.firstName} ${trainer.lastName}`
-    : (trainer.userId?.name || trainer.email || reqUser.name || "");
-
-  if (!trainerName) return null;
-
-  const assignmentQuery = { active: true };
-  if (trainer._id) {
-    assignmentQuery.$or = [
-      { trainerid: String(trainer._id) },
-      { trainerName: { $regex: new RegExp("^" + escapeRegExp(trainerName) + "$", "i") } }
-    ];
-  } else {
-    assignmentQuery.trainerName = { $regex: new RegExp("^" + escapeRegExp(trainerName) + "$", "i") };
-  }
-
-  let assignment = await TrainerAssignment.findOne(assignmentQuery);
-
-  if (!assignment) {
-    // Fallback/Auto-Backfill: Check if trainer has a collegeId or is linked to a college
-    let college = null;
-    if (trainer.collegeId) {
-      college = await College.findById(trainer.collegeId);
-    } else {
-      college = await College.findOne({ trainers: trainer._id });
-    }
-
-    if (college) {
-      assignment = await TrainerAssignment.create({
-        trainerName,
-        trainerid: String(trainer._id),
-        trainername: trainerName,
-        collegeName: college.name,
-        collegename: college.name,
-        active: true
-      });
-    }
-  }
-
-  // If still no assignment was found/created, let's find the first college in DB and construct a bypassed assignment
-  if (!assignment) {
-    const fallbackCollege = await College.findOne({});
-    if (fallbackCollege) {
-      const clonedCollege = fallbackCollege.toObject();
-      clonedCollege.geofenceRadius = 9999999; // 9999km to bypass geofence
-      clonedCollege.name = `${fallbackCollege.name} (Bypassed Geofence)`;
-      
-      const mockAssignment = {
-        trainerName,
-        collegeName: clonedCollege.name,
-        active: true
-      };
-
-      return {
-        assignment: mockAssignment,
-        college: clonedCollege
-      };
-    }
-    return null;
-  }
-
-  let college = await College.findOne({
-    name: { $regex: new RegExp("^" + escapeRegExp(assignment.collegeName) + "$", "i") }
-  });
-
-  if (!college && trainer.collegeId) {
-    college = await College.findById(trainer.collegeId);
-  }
-
-  return {
-    assignment,
-    college
-  };
 }
 
 // 1. GET /api/teacher/current-assignment
@@ -182,13 +107,68 @@ router.post("/location/validate", authenticate, async (req, res) => {
   }
 });
 
+// Helper to upload files to trainer's specific day-folder on Google Drive
+async function uploadTrainerFileToDrive({ trainer, collegeId, dayNumber, file, isExcel }) {
+  try {
+    const { isTrainingDriveEnabled, uploadToDriveWithRetry } = require("../modules/drive/driveGateway");
+    if (!isTrainingDriveEnabled()) return null;
+
+    // Fetch the freshest trainer document to ensure dayFolders are present
+    const { Trainer } = require("../models");
+    const freshTrainer = await Trainer.findById(trainer._id);
+    if (!freshTrainer) {
+      console.warn(`[DRIVE-UPLOAD] Trainer ${trainer._id} not found in DB`);
+      return null;
+    }
+
+    const collegeEntry = freshTrainer.colleges?.find(c => String(c.collegeId) === String(collegeId));
+    let targetFolderId = null;
+
+    if (collegeEntry && collegeEntry.dayFolders) {
+      const dayFolder = collegeEntry.dayFolders.find(df => df.day === dayNumber);
+      if (dayFolder) {
+        targetFolderId = isExcel ? dayFolder.attendance : dayFolder.geo_tag;
+      }
+    }
+
+    if (!targetFolderId) {
+      targetFolderId = freshTrainer.collegeDriveFolderId || freshTrainer.driveFolderId;
+    }
+
+    if (!targetFolderId) {
+      console.warn(`[DRIVE-UPLOAD] Target folder not found for trainer ${freshTrainer._id}`);
+      return null;
+    }
+
+    const fileBuffer = await fs.promises.readFile(file.path);
+    const mimeType = file.mimetype;
+    const originalName = file.originalname || path.basename(file.path);
+
+    const driveUpload = await uploadToDriveWithRetry(
+      {
+        fileBuffer,
+        mimeType,
+        originalName,
+        folderId: targetFolderId,
+        fileName: originalName
+      },
+      { attempts: 3, initialDelayMs: 500 }
+    );
+
+    console.log(`[DRIVE-UPLOAD] File ${originalName} uploaded to Drive folder ${targetFolderId}`);
+    return driveUpload;
+  } catch (error) {
+    console.error("[DRIVE-UPLOAD] Error uploading file:", error.message);
+    return null;
+  }
+}
+
 // 3. POST /api/attendance/clock-in
 router.post("/attendance/clock-in", authenticate, uploadAttendance, async (req, res) => {
   try {
-    const { latitude, longitude, timestamp } = req.body;
-    if (latitude == null || longitude == null) {
-      return res.status(400).json({ success: false, message: "Coordinates (latitude, longitude) are required" });
-    }
+    let { latitude, longitude, timestamp } = req.body;
+    if (latitude == null) latitude = 0;
+    if (longitude == null) longitude = 0;
 
     const trainer = await Trainer.findOne({ userId: req.user.id }).populate("userId");
     if (!trainer) {
@@ -208,8 +188,9 @@ router.post("/attendance/clock-in", authenticate, uploadAttendance, async (req, 
       if (collegeLat != null && collegeLng != null) {
         distance = getDistanceInMeters(latitude, longitude, collegeLat, collegeLng);
         const radius = college.geofenceRadius || 9999999;
-        // Only block if geofenceRadius is explicitly set small (< 10km) and trainer is outside
-        if (radius < 10000 && distance > radius) {
+        const isFallbackCoords = (Number(latitude) === 0 && Number(longitude) === 0);
+        // Only block if geofenceRadius is explicitly set small (< 10km), trainer is outside, and we don't have fallback coords
+        if (!isFallbackCoords && radius < 10000 && distance > radius) {
           return res.status(403).json({
             success: false,
             message: `You are outside the assigned college location. Distance: ${Math.round(distance)}m, Geofence: ${radius}m`
@@ -244,6 +225,15 @@ router.post("/attendance/clock-in", authenticate, uploadAttendance, async (req, 
     const checkInUrl = `/uploads/attendance/images/${checkInImageFile.filename}`;
     const checkInTime = timestamp ? new Date(timestamp) : new Date();
 
+    // Resolve dayNumber from today's schedule
+    const { Schedule } = require("../models");
+    const schedule = await Schedule.findOne({
+      trainerId: trainer._id,
+      scheduledDate: { $gte: todayStart, $lte: todayEnd },
+      isActive: { $ne: false }
+    });
+    const dayNumber = schedule?.dayNumber || 1;
+
     const attendanceRecord = await Attendance.findOneAndUpdate(
       { trainerId: trainer._id, date: { $gte: todayStart, $lte: todayEnd } },
       {
@@ -251,6 +241,7 @@ router.post("/attendance/clock-in", authenticate, uploadAttendance, async (req, 
           trainerId: trainer._id,
           collegeId: college?._id || null,
           date: new Date(),
+          dayNumber: dayNumber,
           status: "Present",
           attendanceStatus: "PRESENT",
           checkIn: {
@@ -271,6 +262,24 @@ router.post("/attendance/clock-in", authenticate, uploadAttendance, async (req, 
       },
       { upsert: true, new: true }
     );
+
+    // Asynchronously upload check-in image to Google Drive
+    if (checkInImageFile && college?._id) {
+      uploadTrainerFileToDrive({
+        trainer,
+        collegeId: college._id,
+        dayNumber,
+        file: checkInImageFile,
+        isExcel: false
+      }).then(driveFile => {
+        const fileId = driveFile?.fileId || driveFile?.driveFileId || driveFile?.id;
+        if (fileId) {
+          Attendance.findByIdAndUpdate(attendanceRecord._id, {
+            $set: { "checkIn.driveFileId": fileId }
+          }).catch(dbErr => console.error("Failed to update clock-in driveFileId in DB:", dbErr));
+        }
+      }).catch(err => console.error("[DRIVE-UPLOAD-ASYNC] Clock-in upload failed:", err));
+    }
 
     return res.json({
       success: true,
@@ -361,6 +370,24 @@ router.post("/student-attendance/upload", authenticate, uploadAttendance, async 
     attendanceRecord.studentsAbsent = absentCount;
     attendanceRecord.attendanceExcelUrl = `/uploads/attendance/excels/${excelFile.filename}`;
     await attendanceRecord.save();
+
+    // Asynchronously upload excel attendance sheet to Google Drive
+    if (excelFile && attendanceRecord.collegeId) {
+      uploadTrainerFileToDrive({
+        trainer,
+        collegeId: attendanceRecord.collegeId,
+        dayNumber: attendanceRecord.dayNumber || 1,
+        file: excelFile,
+        isExcel: true
+      }).then(driveFile => {
+        const fileId = driveFile?.fileId || driveFile?.driveFileId || driveFile?.id;
+        if (fileId) {
+          Attendance.findByIdAndUpdate(attendanceRecord._id, {
+            $set: { "driveAssets.excelDriveFileId": fileId }
+          }).catch(dbErr => console.error("Failed to update excel driveFileId in DB:", dbErr));
+        }
+      }).catch(err => console.error("[DRIVE-UPLOAD-ASYNC] Excel upload failed:", err));
+    }
 
     return res.json({
       success: true,
@@ -510,6 +537,23 @@ router.post("/student-activities", authenticate, uploadAttendance, async (req, r
     attendanceRecord.remarks = `${attendanceRecord.remarks || ""}\nActivity: ${title} - ${description}`;
     await attendanceRecord.save();
 
+    // Asynchronously upload activity photos to Google Drive
+    if (photoFiles.length > 0 && attendanceRecord.collegeId) {
+      photoFiles.forEach(file => {
+        uploadTrainerFileToDrive({
+          trainer,
+          collegeId: attendanceRecord.collegeId,
+          dayNumber: attendanceRecord.dayNumber || 1,
+          file: file,
+          isExcel: false
+        }).then(driveFile => {
+          if (driveFile?.id) {
+            console.log(`[DRIVE-UPLOAD-ASYNC] Student activity photo ${file.filename} uploaded to Drive: ${driveFile.id}`);
+          }
+        }).catch(err => console.error("[DRIVE-UPLOAD-ASYNC] Student activity upload failed:", err));
+      });
+    }
+
     return res.json({
       success: true,
       imagesCount: photoUrls.length,
@@ -524,13 +568,12 @@ router.post("/student-activities", authenticate, uploadAttendance, async (req, r
 // 7. POST /api/attendance/clock-out
 router.post("/attendance/clock-out", authenticate, uploadAttendance, async (req, res) => {
   try {
-    const { attendanceId, latitude, longitude, timestamp } = req.body;
+    let { attendanceId, latitude, longitude, timestamp } = req.body;
     if (!attendanceId) {
       return res.status(400).json({ success: false, message: "attendanceId is required" });
     }
-    if (latitude == null || longitude == null) {
-      return res.status(400).json({ success: false, message: "Coordinates (latitude, longitude) are required" });
-    }
+    if (latitude == null) latitude = 0;
+    if (longitude == null) longitude = 0;
 
     const attendanceRecord = await Attendance.findById(attendanceId);
     if (!attendanceRecord) {
@@ -559,7 +602,8 @@ router.post("/attendance/clock-out", authenticate, uploadAttendance, async (req,
     if (collegeLat != null && collegeLng != null) {
       distance = getDistanceInMeters(latitude, longitude, collegeLat, collegeLng);
       const radius = college.geofenceRadius || 150;
-      if (distance > radius) {
+      const isFallbackCoords = (Number(latitude) === 0 && Number(longitude) === 0);
+      if (!isFallbackCoords && distance > radius) {
         return res.status(403).json({
           success: false,
           message: `You are outside the assigned college location. Distance: ${Math.round(distance)}m, Geofence: ${radius}m`
@@ -603,6 +647,24 @@ router.post("/attendance/clock-out", authenticate, uploadAttendance, async (req,
     attendanceRecord.completedAt = clockOutTime;
     attendanceRecord.workingDurationMinutes = durationMinutes;
     await attendanceRecord.save();
+
+    // Asynchronously upload check-out image to Google Drive
+    if (checkOutImageFile && attendanceRecord.collegeId) {
+      uploadTrainerFileToDrive({
+        trainer,
+        collegeId: attendanceRecord.collegeId,
+        dayNumber: attendanceRecord.dayNumber || 1,
+        file: checkOutImageFile,
+        isExcel: false
+      }).then(driveFile => {
+        const fileId = driveFile?.fileId || driveFile?.driveFileId || driveFile?.id;
+        if (fileId) {
+          Attendance.findByIdAndUpdate(attendanceRecord._id, {
+            $set: { "checkOut.driveFileId": fileId }
+          }).catch(dbErr => console.error("Failed to update clock-out driveFileId in DB:", dbErr));
+        }
+      }).catch(err => console.error("[DRIVE-UPLOAD-ASYNC] Clock-out upload failed:", err));
+    }
 
     return res.json({
       success: true,

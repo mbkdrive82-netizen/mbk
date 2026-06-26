@@ -101,7 +101,7 @@ const nextConfig = {
     const isProd = process.env.NODE_ENV === "production";
     
     const connectSources = ["'self'", "https://*.getstream.io", "https://*.stream-io-api.com", "https://*.firebaseapp.com", "https://*.googleapis.com", "https://*.firebase.com"];
-    const imgSources = ["'self'", "data:", "blob:", "https://res.cloudinary.com", "https://i.ibb.co", "https://maps.gstatic.com", "https://*.googleapis.com"];
+    const imgSources = ["'self'", "data:", "blob:", "https://res.cloudinary.com", "https://i.ibb.co", "https://maps.gstatic.com", "https://*.googleapis.com", "https://lh3.googleusercontent.com", "https://*.googleusercontent.com", "https://drive.google.com"];
     const scriptSources = ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://maps.googleapis.com", "https://apis.google.com"];
     const styleSources = ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"];
     const fontSources = ["'self'", "data:", "https://fonts.gstatic.com"];
@@ -131,6 +131,7 @@ const nextConfig = {
       `style-src ${styleSources.join(" ")}`,
       `font-src ${fontSources.join(" ")}`,
       `frame-src ${frameSources.join(" ")}`,
+      `worker-src 'self' blob:`,
     ].join("; ");
 
     const headers = [

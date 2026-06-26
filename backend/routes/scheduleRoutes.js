@@ -38,28 +38,53 @@ const deleteScheduleController = createDeleteScheduleController();
 
 // @route   POST /api/schedules/create
 // @desc    Create a single schedule
-// @access  SPOC Admin
-router.post("/create", createScheduleController);
+// @access  CompanyAdmin, SPOC Admin, SuperAdmin
+router.post(
+  "/create",
+  authenticate,
+  authorize(["CompanyAdmin", "SPOCAdmin", "SuperAdmin"]),
+  createScheduleController,
+);
 
 // @route   POST /api/schedules/bulk-create
 // @desc    Create multiple schedules at once
-// @access  SPOC Admin
-router.post("/bulk-create", authenticate, authorize(["SPOCAdmin", "SuperAdmin"]), bulkCreateScheduleController);
+// @access  CompanyAdmin, SPOC Admin, SuperAdmin
+router.post(
+  "/bulk-create",
+  authenticate,
+  authorize(["CompanyAdmin", "SPOCAdmin", "SuperAdmin"]),
+  bulkCreateScheduleController,
+);
 
 // @route   GET /api/schedules/all
 // @desc    Get all schedules
-// @access  SPOC Admin
-router.get("/all", authenticate, authorize(["SPOCAdmin", "SuperAdmin"]), listSchedulesController);
+// @access  CompanyAdmin, SPOC Admin, SuperAdmin
+router.get(
+  "/all",
+  authenticate,
+  authorize(["CompanyAdmin", "SPOCAdmin", "SuperAdmin"]),
+  listSchedulesController,
+);
 
 // @route   GET /api/schedules/live-dashboard
 // @desc    Get today's schedules with live attendance status
-// @access  SPOC Admin
-router.get("/live-dashboard", authenticate, authorize(["SPOCAdmin", "SuperAdmin"]), liveDashboardController);
+// @access  CompanyAdmin, SPOC Admin, SuperAdmin
+router.get(
+  "/live-dashboard",
+  authenticate,
+  authorize(["CompanyAdmin", "SPOCAdmin", "SuperAdmin"]),
+  liveDashboardController,
+);
 
 // @route   GET /api/schedules/days?departmentId=xxx
 // @desc    Get day status slots for a department
-// @access  SPOC Admin, SuperAdmin
-router.get("/days", authenticate, authorize(["SPOCAdmin", "SuperAdmin"]), departmentDaysController);
+// @access  CompanyAdmin, SPOC Admin, SuperAdmin
+router.get(
+  "/days",
+  authenticate,
+  authorize(["CompanyAdmin", "SPOCAdmin", "SuperAdmin"]),
+  departmentDaysController,
+);
 
 // Shared handler – resolves trainerId from URL param or authenticated user
 // Shared handler – resolves trainerId from URL param or authenticated user, always using the Trainer ObjectId for schedule queries
@@ -135,13 +160,23 @@ router.put("/:id/assign", authenticate, authorize(["SPOCAdmin"]), assignSchedule
 
 // @route   PUT /api/schedules/:id
 // @desc    Update a schedule
-// @access  SPOC Admin, Super Admin, Company
-router.put("/:id", authenticate, authorize(["SPOCAdmin", "SuperAdmin", "company", "Company", "companyadmin", "CompanyAdmin"]), updateScheduleController);
+// @access  CompanyAdmin, SPOC Admin, SuperAdmin
+router.put(
+  "/:id",
+  authenticate,
+  authorize(["CompanyAdmin", "SPOCAdmin", "SuperAdmin"]),
+  updateScheduleController,
+);
 
 // @route   DELETE /api/schedules/:id
 // @desc    Delete a schedule
-// @access  SPOC Admin, Super Admin, Company
-router.delete("/:id", authenticate, authorize(["SPOCAdmin", "SuperAdmin", "company", "Company", "companyadmin", "CompanyAdmin"]), deleteScheduleController);
+// @access  CompanyAdmin, SPOC Admin, SuperAdmin
+router.delete(
+  "/:id",
+  authenticate,
+  authorize(["CompanyAdmin", "SPOCAdmin", "SuperAdmin"]),
+  deleteScheduleController,
+);
 
 // @route   GET /api/schedules/associations
 // @desc    Get all companies, courses, and colleges for dropdown associations

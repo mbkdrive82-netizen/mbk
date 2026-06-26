@@ -58,12 +58,32 @@ const Login = ({ specificRole, inModal = false, onSuccess }) => {
 
   const navigateAfterLogin = async (route, role, email) => {
     console.debug("[AUTH] redirecting after login:", { route, role, email });
-    prefetchPortalRoutes(router, role, email);
-    try {
-      await warmPortalDataBundle();
-    } catch (error) {
-      console.warn("Portal data warmup failed before navigation:", error);
+
+    // Use a hard redirect for protected portal routes so the Next.js middleware
+    // reads the freshly-set auth cookie on the very first request and allows
+    // access immediately — soft (client-side) navigation doesn't send the cookie
+    // to the middleware, causing a momentary home-page flash before the dashboard loads.
+    const isPortalRoute =
+      route.startsWith("/dashboard") ||
+      route.startsWith("/spoc") ||
+      route.startsWith("/trainer") ||
+      route.startsWith("/student") ||
+      route.startsWith("/company") ||
+      route.startsWith("/accountant");
+
+    if (typeof window !== "undefined" && isPortalRoute) {
+      // Background warmup before the hard redirect
+      try {
+        prefetchPortalRoutes(router, role, email);
+        warmPortalDataBundle();
+      } catch {
+        // Non-blocking; ignore warmup errors
+      }
+      window.location.href = route;
+      return;
     }
+
+    // Fallback: soft navigation for non-portal or SSR paths
     safeReplace(route);
   };
 
@@ -72,16 +92,6 @@ const Login = ({ specificRole, inModal = false, onSuccess }) => {
     const params = new URLSearchParams(window.location.search);
     const type = params.get("type") || "";
     const redirect = params.get("redirect") || "";
-
-    if (type === "admin") {
-      const companyAuthQuery = new URLSearchParams();
-      if (redirect) companyAuthQuery.set("redirect", redirect);
-      const reason = params.get("reason");
-      if (reason) companyAuthQuery.set("reason", reason);
-      const suffix = companyAuthQuery.toString();
-      safeReplace(suffix ? `/company/auth?${suffix}` : "/company/auth");
-      return;
-    }
 
     setQueryLoginType(type);
     setQueryRedirect(redirect);

@@ -64,6 +64,8 @@ const parseCreateScheduleBody = (body = {}) => ({
   startTime: body?.startTime,
   endTime: body?.endTime,
   subject: body?.subject,
+  venue: body?.venue,
+  remarks: body?.remarks,
   createdBy: body?.createdBy,
 });
 

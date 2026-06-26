@@ -83,6 +83,17 @@ const AssignTrainersModal = ({ open, onClose, onSave, college, trainers = [] }) 
     const handleSubmit = (e) => {
         e.preventDefault();
 
+        // Validate that all added schedules have both start time and end time filled in
+        for (const trainerId of selectedTrainerIds) {
+            const schedules = trainerSchedules[trainerId] || [];
+            for (const schedule of schedules) {
+                if (!schedule.startTime || !schedule.endTime) {
+                    alert("Please fill in both start time and end time for all schedules.");
+                    return;
+                }
+            }
+        }
+
         // Format data for backend API
         const trainersData = selectedTrainerIds.map(trainerId => ({
             trainerId,

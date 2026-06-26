@@ -110,31 +110,98 @@ const VirtualizedActivityRow = memo(function VirtualizedActivityRow({
   );
 });
 
+const pad2 = (value) => String(value).padStart(2, "0");
+
+// Attendance times are stored inconsistently: some rows use a full ISO datetime
+// (e.g. "2026-06-19T21:32:06.626Z"), others a plain "HH:MM:SS"/"HH:MM" string,
+// and some are missing. Normalise an ISO/Date value into a Date when possible.
+const toDateTime = (value) => {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  if (typeof value === "string" && /\d{4}-\d{2}-\d{2}T/.test(value)) {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  return null;
+};
+
+// Seconds since midnight for an ISO datetime or an "HH:MM:SS" string.
+const toSecondsOfDay = (value) => {
+  const dateValue = toDateTime(value);
+  if (dateValue) {
+    return (
+      dateValue.getHours() * 3600 +
+      dateValue.getMinutes() * 60 +
+      dateValue.getSeconds()
+    );
+  }
+  const match = String(value || "")
+    .trim()
+    .match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (!match) return null;
+  return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3] || 0);
+};
+
+// Human-readable "hh:mm AM/PM" regardless of how the time was stored.
+const formatActivityTime = (value) => {
+  if (!value) return null;
+  const dateValue = toDateTime(value);
+  if (dateValue) {
+    return dateValue.toLocaleTimeString("en-IN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  }
+  const match = String(value)
+    .trim()
+    .match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (match) {
+    const hour = Number(match[1]);
+    const minute = Number(match[2]);
+    const period = hour >= 12 ? "PM" : "AM";
+    const hour12 = ((hour + 11) % 12) + 1;
+    return `${pad2(hour12)}:${pad2(minute)} ${period}`;
+  }
+  return String(value);
+};
+
+// Check-in falls back to the record creation time (the row is created at
+// check-in) so the column isn't blank for legacy rows missing checkInTime.
+const resolveCheckInValue = (record = {}) => {
+  if (record.checkInTime) return record.checkInTime;
+  if (typeof record.checkIn === "string" && record.checkIn) return record.checkIn;
+  if (record.createdAt) return record.createdAt;
+  return null;
+};
+
+const resolveCheckOutValue = (record = {}) =>
+  record.checkOutTime || record.checkOutCapturedAt || null;
+
 const getDurationMinutes = (record) => {
-  if (!record?.checkInTime || !record?.checkOutTime) {
+  const checkInValue = resolveCheckInValue(record);
+  const checkOutValue = resolveCheckOutValue(record);
+  if (!checkInValue || !checkOutValue) {
     return null;
   }
 
-  try {
-    const parseTimeToSeconds = (value) => {
-      const [h, m, s] = String(value || "0:0:0")
-        .split(":")
-        .map((segment) => Number(segment || 0));
-      return h * 3600 + m * 60 + s;
-    };
+  // Prefer absolute datetime difference when both are full timestamps.
+  const checkInDate = toDateTime(checkInValue);
+  const checkOutDate = toDateTime(checkOutValue);
+  if (checkInDate && checkOutDate) {
+    const minutes = Math.round(
+      (checkOutDate.getTime() - checkInDate.getTime()) / 60000,
+    );
+    return minutes > 0 ? minutes : null;
+  }
 
-    const startedAt = parseTimeToSeconds(record.checkInTime);
-    const endedAt = parseTimeToSeconds(record.checkOutTime);
-    const totalSeconds = endedAt - startedAt;
-
-    if (totalSeconds <= 0) {
-      return null;
-    }
-
-    return Math.round(totalSeconds / 60);
-  } catch {
+  const startedAt = toSecondsOfDay(checkInValue);
+  const endedAt = toSecondsOfDay(checkOutValue);
+  if (startedAt == null || endedAt == null) {
     return null;
   }
+  const minutes = Math.round((endedAt - startedAt) / 60);
+  return minutes > 0 ? minutes : null;
 };
 
 const getDurationLabel = (record) => {
@@ -323,8 +390,8 @@ const TrainerActivity = () => {
           "Trainer Name": item.trainerId?.userId?.name || "Unknown",
           "Trainer ID": item.trainerId?.trainerId || "-",
           "College Name": item.collegeId?.name || "-",
-          "Check-In": item.checkInTime || "-",
-          "Check-Out": item.checkOutTime || "-",
+          "Check-In": formatActivityTime(resolveCheckInValue(item)) || "-",
+          "Check-Out": formatActivityTime(resolveCheckOutValue(item)) || "-",
           Status: item.status || "-",
           Location:
             item.location || (item.latitude ? `${item.latitude}, ${item.longitude}` : "-"),
@@ -371,8 +438,8 @@ const TrainerActivity = () => {
           item.date ? dayjs(item.date).format("DD MMM YYYY") : "-",
           item.trainerId?.userId?.name || "Unknown",
           item.collegeId?.name || "-",
-          item.checkInTime || "-",
-          item.checkOutTime || "-",
+          formatActivityTime(resolveCheckInValue(item)) || "-",
+          formatActivityTime(resolveCheckOutValue(item)) || "-",
           item.status || "-",
           item.location || (item.latitude ? `${item.latitude}, ${item.longitude}` : "-"),
         ],
@@ -452,26 +519,30 @@ const TrainerActivity = () => {
       },
       {
         id: "times",
-        accessorFn: (row) => row.checkInTime || "",
+        accessorFn: (row) => resolveCheckInValue(row) || "",
         header: "Today's Check-In & Out",
-        cell: ({ row }) => (
-          <Space orientation="vertical" size={2}>
-            <Tag color="cyan">
-              <Space>
-                <ClockCircleOutlined />
-                In: {row.original.checkInTime || "-"}
-              </Space>
-            </Tag>
-            {row.original.checkOutTime ? (
-              <Tag color="blue">
+        cell: ({ row }) => {
+          const checkInLabel = formatActivityTime(resolveCheckInValue(row.original));
+          const checkOutLabel = formatActivityTime(resolveCheckOutValue(row.original));
+          return (
+            <Space orientation="vertical" size={2}>
+              <Tag color="cyan">
                 <Space>
                   <ClockCircleOutlined />
-                  Out: {row.original.checkOutTime}
+                  In: {checkInLabel || "-"}
                 </Space>
               </Tag>
-            ) : null}
-          </Space>
-        ),
+              {checkOutLabel ? (
+                <Tag color="blue">
+                  <Space>
+                    <ClockCircleOutlined />
+                    Out: {checkOutLabel}
+                  </Space>
+                </Tag>
+              ) : null}
+            </Space>
+          );
+        },
       },
       {
         id: "duration",

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { useAuth } from '../../../src/context/AuthContext';
 import authService from '../../../src/services/authService';
+import { studentPortalService } from '../../../src/services/studentPortalService';
 import notify from '../../../src/lib/toast';
 import CTAButton from '../../../src/components/common/CTAButton';
 import PasswordInputWithToggle from '../../../src/components/common/PasswordInputWithToggle';
@@ -20,10 +21,21 @@ export default function StudentAuthPage() {
   const { safeReplace, safePush, isRouterReady } = useSafeRouter();
   const { registerStudent, loginStudent, isAuthenticated, userRole, loading: authLoading } = useAuth();
 
+  const FALLBACK_COURSES = [
+    { value: 'PCB', label: 'PCB Circuit Design' },
+    { value: 'IoT', label: 'IoT' },
+    { value: 'Employability', label: 'Employability' },
+    { value: 'Surface Modelling', label: 'Surface Modelling' },
+    { value: 'Full Stack Dev', label: 'MERN Full Stack Development' },
+  ];
+
   const [isLoginMode, setIsLoginMode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [courses, setCourses] = useState(FALLBACK_COURSES);
+  const [isCoursesLoading, setIsCoursesLoading] = useState(false);
+  const [courseLoadError, setCourseLoadError] = useState('');
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -40,6 +52,44 @@ export default function StudentAuthPage() {
       safeReplace('/student/dashboard');
     }
   }, [authLoading, isRouterReady, loading, isAuthenticated, userRole, safeReplace]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadCourses = async () => {
+      setIsCoursesLoading(true);
+      setCourseLoadError('');
+      try {
+        const data = await studentPortalService.getCourses();
+        const availableCourses = Array.isArray(data) ? data : data?.data || [];
+        if (!cancelled && availableCourses.length > 0) {
+          setCourses(
+            availableCourses.map((course) => {
+              const rawTitle = String(course.title || course.name || course.label || '').trim();
+              const normalizedTitle = rawTitle || String(course._id || course.id || '').trim();
+              const displayName = normalizedTitle || 'Untitled Course';
+              return {
+                value: displayName,
+                label: displayName,
+              };
+            }),
+          );
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setCourseLoadError('Unable to load course options. Please try again later.');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsCoursesLoading(false);
+        }
+      }
+    };
+
+    loadCourses();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -137,14 +187,28 @@ export default function StudentAuthPage() {
                 <input type="text" name="fullName" placeholder="Full Name *" value={formData.fullName} onChange={handleInputChange} style={styles.inputField} required minLength={2} maxLength={100} autoComplete="name" disabled={loading} />
                 <input type="tel" name="phoneNumber" placeholder="Phone Number (10 digits) *" value={formData.phoneNumber} onChange={handleInputChange} style={styles.inputField} required inputMode="numeric" pattern="[6-9][0-9]{9}" maxLength={10} autoComplete="tel" disabled={loading} />
                 <input type="text" name="collegeName" placeholder="College / Institute Name *" value={formData.collegeName} onChange={handleInputChange} style={styles.inputField} required minLength={2} maxLength={200} disabled={loading} />
-                <select name="course" value={formData.course} onChange={handleInputChange} style={styles.selectField} required disabled={loading} aria-required="true">
+                <select
+                  name="course"
+                  value={formData.course}
+                  onChange={handleInputChange}
+                  style={styles.selectField}
+                  required
+                  disabled={loading || isCoursesLoading}
+                  aria-required="true"
+                >
                   <option value="">Select a Course</option>
-                  <option value="pcb">PCB Circuit Design</option>
-                  <option value="iot">IoT</option>
-                  <option value="employability">Employability</option>
-                  <option value="AI Automation">AI with MS Office Course</option>
-                  <option value="Full Stack Dev">MERN Full Stack Development</option>
+                  {courses.map((course) => (
+                    <option key={course.value} value={course.value}>
+                      {course.label}
+                    </option>
+                  ))}
                 </select>
+                {courseLoadError ? (
+                  <p style={styles.errorText}>{courseLoadError}</p>
+                ) : null}
+                {isCoursesLoading ? (
+                  <p style={styles.infoText}>Loading course options...</p>
+                ) : null}
               </>
             )}
 

@@ -747,40 +747,24 @@ const uploadTrainerDocumentFeed = async ({
       verificationComment: null,
     };
   } catch (driveError) {
-    console.warn("Google Drive upload failed, falling back to local file storage:", driveError.message);
-    
-    const localFileName = `${trainer.trainerId || trainer._id}-${normalizedDocType}-${Date.now()}${path.extname(file?.originalname || "")}`;
-    const localUploadDir = path.resolve(process.cwd(), "uploads", "trainer-documents");
-    await fs.mkdir(localUploadDir, { recursive: true });
-    
-    await fs.writeFile(path.join(localUploadDir, localFileName), file.buffer);
-    fileLink = `/uploads/trainer-documents/${localFileName}`;
-
-    logUploadTelemetry("info", {
+    // No local fallback by design: trainer documents MUST live in Google Drive.
+    // Saving to the backend disk silently would create files that are invisible
+    // in Drive and unscalable for 1000+ trainers. Fail loudly so the issue is
+    // surfaced and fixed instead of producing a non-Drive record.
+    logUploadTelemetry("error", {
       ...baseTelemetry,
-      stage: "local_fallback_succeeded",
+      stage: "drive_upload_failed",
       trainerId: String(trainer._id),
       documentType: normalizedDocType,
-      status: "local_fallback",
-      outcome: "succeeded",
+      status: "drive_upload",
+      outcome: "failed",
+      reason: driveError.message,
     });
 
-    documentData = {
-      trainerId: trainer._id,
-      documentType: normalizedDocType,
-      fileName: localFileName,
-      filePath: fileLink,
-      driveFileId: null,
-      driveViewLink: fileLink,
-      driveDownloadLink: fileLink,
-      driveFolderId: null,
-      driveFolderName: null,
-      fileSize: file.size,
-      mimeType: resolvedMimeType,
-      verificationStatus: "PENDING",
-      verifiedAt: null,
-      verificationComment: null,
-    };
+    throw createStatusError(
+      502,
+      `Google Drive upload failed for ${normalizedDocType}. Please retry. (${driveError.message})`,
+    );
   }
 
   const previousDriveFileId = existingDoc?.driveFileId || null;

@@ -153,8 +153,11 @@ function AttendanceUploadSection() {
           2: "Location unavailable. Ensure GPS/Wi-Fi is enabled.",
           3: "Location request timed out. Please try again.",
         };
-        setLocationStatus("error");
+        // Fallback to (0,0) so the process doesn't block the trainer
+        setLocation({ lat: 0, lng: 0, accuracy: 0, timestamp: Date.now() });
+        setLocationStatus("ready");
         setLocationError(messages[err.code] || "Failed to get location.");
+        console.warn("Location acquisition failed, using fallback coordinates (0, 0)");
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
     );

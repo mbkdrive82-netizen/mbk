@@ -24,10 +24,13 @@ const resolveDefaultDriveFolderId = () =>
   String(
     process.env.GOOGLE_DRIVE_FOLDER_ID ||
       process.env.GOOGLE_DRIVE_TRAINER_DOCUMENTS_FOLDER_ID ||
+      process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID ||
+      process.env.GOOGLE_DRIVE_ROOT_FOLDER ||
       "",
   ).trim();
 
-const DEFAULT_TRAINER_DOCUMENTS_FOLDER_ID = resolveDefaultDriveFolderId();
+const getDefaultTrainerDocumentsFolderId = () => resolveDefaultDriveFolderId();
+const DEFAULT_TRAINER_DOCUMENTS_FOLDER_ID = getDefaultTrainerDocumentsFolderId();
 
 let driveClientPromise = null;
 const folderMetadataCache = new Map();
@@ -95,27 +98,68 @@ const resolveCandidateServiceAccountPaths = () => {
 };
 
 const resolveServiceAccountConfig = () => {
-  const inlineConfig = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON;
+  const inlineConfig =
+    process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON ||
+    process.env.GOOGLE_SERVICE_ACCOUNT_JSON ||
+    process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY ||
+    process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+
+  const configuredPath =
+    process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY_PATH ||
+    process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH ||
+    process.env.GOOGLE_SERVICE_ACCOUNT_FILE_PATH ||
+    process.env.GOOGLE_SERVICE_ACCOUNT_PATH;
+
   if (inlineConfig) {
-    return JSON.parse(inlineConfig);
+    try {
+      return JSON.parse(inlineConfig);
+    } catch (err) {
+      console.error('[GOOGLE-DRIVE] Failed to parse inline service account JSON:', err.message);
+      throw err;
+    }
   }
 
-  const configuredPath = process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY_PATH;
   if (configuredPath) {
     const absolutePath = path.isAbsolute(configuredPath)
       ? configuredPath
       : path.resolve(process.cwd(), configuredPath);
 
-    if (!fs.existsSync(absolutePath)) {
+    console.log('[GOOGLE-DRIVE] resolveServiceAccountConfig cwd=', process.cwd());
+    console.log('[GOOGLE-DRIVE] resolveServiceAccountConfig configuredPath=', configuredPath);
+    console.log('[GOOGLE-DRIVE] resolveServiceAccountConfig absolutePath=', absolutePath);
+    console.log('[GOOGLE-DRIVE] resolveServiceAccountConfig exists=', fs.existsSync(absolutePath));
+    const candidatePaths = resolveCandidateServiceAccountPaths();
+    console.log('[GOOGLE-DRIVE] resolveServiceAccountConfig candidatePaths=', candidatePaths);
+
+    if (fs.existsSync(absolutePath)) {
+      return JSON.parse(fs.readFileSync(absolutePath, "utf8"));
+    }
+
+    if (candidatePaths.length === 1) {
+      console.log('[GOOGLE-DRIVE] resolveServiceAccountConfig fallback candidate=', candidatePaths[0]);
+      return JSON.parse(fs.readFileSync(candidatePaths[0], "utf8"));
+    }
+
+    if (candidatePaths.length > 1) {
       throw new Error(
-        `Google Drive service account key not found at: ${absolutePath}`,
+        `Google Drive service account key not found at: ${absolutePath}. Multiple credential files were found in config, so the configured path could not be resolved automatically. Set GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY_PATH or GOOGLE_SERVICE_ACCOUNT_KEY_PATH explicitly.`,
       );
     }
 
-    return JSON.parse(fs.readFileSync(absolutePath, "utf8"));
+    if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON) {
+      return JSON.parse(
+        process.env.GOOGLE_SERVICE_ACCOUNT_JSON ||
+          process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON,
+      );
+    }
+
+    throw new Error(
+      `Google Drive service account key not found at: ${absolutePath}`,
+    );
   }
 
   const candidatePaths = resolveCandidateServiceAccountPaths();
+
   if (candidatePaths.length === 1) {
     return JSON.parse(fs.readFileSync(candidatePaths[0], "utf8"));
   }
@@ -133,15 +177,22 @@ const resolveServiceAccountConfig = () => {
 
 const resolveOAuthDriveConfig = () => {
   const clientId = String(
-    process.env.GOOGLE_DRIVE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || "",
+    process.env.GOOGLE_DRIVE_CLIENT_ID ||
+      process.env.GOOGLE_OAUTH_CLIENT_ID ||
+      process.env.GOOGLE_CLIENT_ID ||
+      "",
   ).trim();
   const clientSecret = String(
     process.env.GOOGLE_DRIVE_CLIENT_SECRET ||
+      process.env.GOOGLE_OAUTH_CLIENT_SECRET ||
       process.env.GOOGLE_CLIENT_SECRET ||
       "",
   ).trim();
   const refreshToken = String(
-    process.env.GOOGLE_DRIVE_REFRESH_TOKEN || process.env.GOOGLE_REFRESH_TOKEN || "",
+    process.env.GOOGLE_DRIVE_REFRESH_TOKEN ||
+      process.env.GOOGLE_OAUTH_REFRESH_TOKEN ||
+      process.env.GOOGLE_REFRESH_TOKEN ||
+      "",
   ).trim();
 
   if (!clientId || !clientSecret || !refreshToken) {
@@ -156,7 +207,7 @@ const resolveOAuthDriveConfig = () => {
 };
 
 const resolveConfiguredDriveAuthMode = () =>
-  String(process.env.GOOGLE_DRIVE_AUTH_MODE || "")
+  String(process.env.GOOGLE_DRIVE_AUTH_MODE || process.env.GOOGLE_DRIVE_AUTH_METHOD || "")
     .trim()
     .toLowerCase();
 
@@ -321,7 +372,7 @@ const getFolderMetadata = async (drive, folderId) => {
 
 const ensureDriveFolder = async ({
   folderName,
-  parentFolderId = DEFAULT_TRAINER_DOCUMENTS_FOLDER_ID,
+  parentFolderId = getDefaultTrainerDocumentsFolderId(),
 }) => {
   if (!parentFolderId) {
     throw new Error("Google Drive parent folder ID is required.");
@@ -417,7 +468,7 @@ const ensureDriveFolder = async ({
   return createdFolder.data;
 };
 
-const createFolder = async (name, parentId = DEFAULT_TRAINER_DOCUMENTS_FOLDER_ID) =>
+const createFolder = async (name, parentId = getDefaultTrainerDocumentsFolderId()) =>
   ensureDriveFolder({
     folderName: name,
     parentFolderId: parentId,
@@ -426,7 +477,7 @@ const createFolder = async (name, parentId = DEFAULT_TRAINER_DOCUMENTS_FOLDER_ID
 const listDriveFoldersByName = async ({
   drive,
   folderName,
-  parentFolderId = DEFAULT_TRAINER_DOCUMENTS_FOLDER_ID,
+  parentFolderId = getDefaultTrainerDocumentsFolderId(),
   pageSize = 10,
 }) => {
   if (!parentFolderId) {
@@ -475,7 +526,7 @@ const listDriveFoldersByName = async ({
 
 const findDriveFolder = async ({
   folderName,
-  parentFolderId = DEFAULT_TRAINER_DOCUMENTS_FOLDER_ID,
+  parentFolderId = getDefaultTrainerDocumentsFolderId(),
 }) => {
   if (!parentFolderId) {
     throw new Error("Google Drive parent folder ID is required.");
@@ -517,7 +568,7 @@ const listDriveFolderChildren = async ({ drive, folderId }) => {
 
 const mergeDuplicateDriveFolders = async ({
   drive,
-  parentFolderId = DEFAULT_TRAINER_DOCUMENTS_FOLDER_ID,
+  parentFolderId = getDefaultTrainerDocumentsFolderId(),
   folderName,
   keepFolderId = null,
 }) => {
@@ -677,7 +728,7 @@ const moveDriveItemToParent = async ({ itemId, targetParentId }) => {
 const syncDriveFolder = async ({
   folderId,
   folderName,
-  parentFolderId = DEFAULT_TRAINER_DOCUMENTS_FOLDER_ID,
+  parentFolderId = getDefaultTrainerDocumentsFolderId(),
 }) => {
   if (!parentFolderId) {
     throw new Error("Google Drive parent folder ID is required.");
@@ -946,7 +997,7 @@ const uploadToDrive = async ({
   fileBuffer,
   mimeType,
   originalName,
-  folderId = DEFAULT_TRAINER_DOCUMENTS_FOLDER_ID,
+  folderId = getDefaultTrainerDocumentsFolderId(),
   fileName,
   replaceExistingFile = true,
   cleanupDuplicateFiles = true,
@@ -1179,6 +1230,8 @@ const deleteFromDrive = async (fileId) => {
 
 module.exports = {
   DEFAULT_TRAINER_DOCUMENTS_FOLDER_ID,
+  getDefaultTrainerDocumentsFolderId,
+  resolveDefaultDriveFolderId,
   getFolderLink,
   createFolder,
   ensureDriveFolder,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import api from '@/services/api';
 import CTAButton from '@/components/common/CTAButton';
 import notify from '@/lib/toast';
@@ -13,16 +13,53 @@ export default function AdminDashboard() {
   const [errorLogs, setErrorLogs] = useState([]);
   const [errorStats, setErrorStats] = useState(null);
   const [selectedTrainer, setSelectedTrainer] = useState(null);
-  const [collegeName, setCollegeName] = useState('');
   const [isAssigning, setIsAssigning] = useState(false);
   const [page, setPage] = useState(1);
 
-  // Load trainers
+  // Colleges (real, selectable) — admin can create many and assign one per trainer.
+  const [colleges, setColleges] = useState([]);
+  const [selectedCollegeId, setSelectedCollegeId] = useState('');
+  const [newCollegeName, setNewCollegeName] = useState('');
+  const [isCreatingCollege, setIsCreatingCollege] = useState(false);
+
+  // Load trainers + colleges
   useEffect(() => {
     if (activeTab === 'trainers') {
       loadTrainers();
+      loadColleges();
     }
   }, [activeTab, page]);
+
+  const loadColleges = async () => {
+    try {
+      const response = await api.get('/api/trainer-management/colleges');
+      setColleges(response.data || []);
+    } catch (error) {
+      notify.error(getErrorMessage(error));
+    }
+  };
+
+  const handleCreateCollege = async () => {
+    const name = newCollegeName.trim();
+    if (!name) {
+      notify.error('Please enter a college name');
+      return;
+    }
+    setIsCreatingCollege(true);
+    try {
+      const response = await api.post('/api/trainer-management/colleges', { name });
+      notify.success(response?.duplicate ? 'College already exists' : 'College created');
+      setNewCollegeName('');
+      await loadColleges();
+      if (response?.data?._id) {
+        setSelectedCollegeId(response.data._id);
+      }
+    } catch (error) {
+      notify.error(getErrorMessage(error));
+    } finally {
+      setIsCreatingCollege(false);
+    }
+  };
 
   // Load error logs
   useEffect(() => {
@@ -37,7 +74,7 @@ export default function AdminDashboard() {
       const response = await api.get('/api/trainer-management/trainers', {
         params: { page, limit: 20 },
       });
-      setTrainers(response.data.data);
+      setTrainers(response.data || []);
     } catch (error) {
       notify.error(getErrorMessage(error));
     }
@@ -48,7 +85,7 @@ export default function AdminDashboard() {
       const response = await api.get('/api/trainer-management/errors', {
         params: { page, limit: 20, resolved: 'false' },
       });
-      setErrorLogs(response.data.data);
+      setErrorLogs(response.data || []);
     } catch (error) {
       notify.error(getErrorMessage(error));
     }
@@ -57,7 +94,7 @@ export default function AdminDashboard() {
   const loadErrorStats = async () => {
     try {
       const response = await api.get('/api/trainer-management/errors/stats/overview');
-      setErrorStats(response.data.data);
+      setErrorStats(response.data || null);
     } catch (error) {
       notify.error(getErrorMessage(error));
     }
@@ -74,8 +111,14 @@ export default function AdminDashboard() {
   };
 
   const handleAssignCollege = async () => {
-    if (!selectedTrainer || !collegeName) {
-      notify.error('Please select trainer and enter college name');
+    if (!selectedTrainer || !selectedCollegeId) {
+      notify.error('Please select a trainer and a college');
+      return;
+    }
+
+    const college = colleges.find((item) => item._id === selectedCollegeId);
+    if (!college) {
+      notify.error('Selected college not found. Please refresh.');
       return;
     }
 
@@ -83,12 +126,12 @@ export default function AdminDashboard() {
     try {
       await api.post('/api/trainer-management/trainers/assign-college', {
         trainerId: selectedTrainer._id,
-        collegeId: '507f1f77bcf86cd799439011', // Replace with actual college selection
-        collegeName,
+        collegeId: college._id,
+        collegeName: college.name,
       });
-      notify.success('College assigned successfully!');
+      notify.success(`"${college.name}" assigned successfully!`);
       setSelectedTrainer(null);
-      setCollegeName('');
+      setSelectedCollegeId('');
       loadTrainers();
     } catch (error) {
       notify.error(getErrorMessage(error));
@@ -141,13 +184,18 @@ export default function AdminDashboard() {
             <div className={styles.assignPanel}>
               <h3>Assign College to {selectedTrainer.firstName} {selectedTrainer.lastName}</h3>
 
-              <input
-                type="text"
-                value={collegeName}
-                onChange={(e) => setCollegeName(e.target.value)}
-                placeholder="Enter college name"
+              <select
+                value={selectedCollegeId}
+                onChange={(e) => setSelectedCollegeId(e.target.value)}
                 className={styles.input}
-              />
+              >
+                <option value="">Select a college…</option>
+                {colleges.map((college) => (
+                  <option key={college._id} value={college._id}>
+                    {college.name}
+                  </option>
+                ))}
+              </select>
 
               <div className={styles.buttonGroup}>
                 <CTAButton
@@ -155,13 +203,14 @@ export default function AdminDashboard() {
                   variant="brand"
                   loading={isAssigning}
                   loadingText="Assigning..."
+                  disabled={!selectedCollegeId}
                 >
                   Assign College
                 </CTAButton>
                 <CTAButton
                   onClick={() => {
                     setSelectedTrainer(null);
-                    setCollegeName('');
+                    setSelectedCollegeId('');
                   }}
                   variant="outline"
                 >
@@ -170,6 +219,37 @@ export default function AdminDashboard() {
               </div>
             </div>
           ) : null}
+
+          {/* College management: create many colleges, assign any one to a trainer */}
+          <div className={styles.assignPanel}>
+            <h3>Colleges ({colleges.length})</h3>
+            <div className={styles.buttonGroup}>
+              <input
+                type="text"
+                value={newCollegeName}
+                onChange={(e) => setNewCollegeName(e.target.value)}
+                placeholder="New college name (e.g. Government Arts College Chennai)"
+                className={styles.input}
+              />
+              <CTAButton
+                onClick={handleCreateCollege}
+                variant="secondary"
+                loading={isCreatingCollege}
+                loadingText="Creating..."
+              >
+                Create College
+              </CTAButton>
+            </div>
+            {colleges.length > 0 ? (
+              <ul style={{ marginTop: '0.75rem', listStyle: 'disc', paddingLeft: '1.25rem' }}>
+                {colleges.slice(0, 10).map((college) => (
+                  <li key={college._id}>{college.name}{college.code ? ` (${college.code})` : ''}</li>
+                ))}
+              </ul>
+            ) : (
+              <p style={{ marginTop: '0.5rem', color: '#64748b' }}>No colleges yet. Create one above.</p>
+            )}
+          </div>
 
           <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
             <table className={styles.table}>

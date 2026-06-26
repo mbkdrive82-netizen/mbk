@@ -205,6 +205,63 @@ const trainerSchema = new mongoose.Schema(
       ref: 'College',
       default: null,
     },
+    colleges: {
+      type: [
+        {
+          collegeId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'College',
+            required: true,
+          },
+          collegeName: {
+            type: String,
+            trim: true,
+            required: true,
+          },
+          googleDriveFolderId: {
+            type: String,
+            default: null,
+          },
+          googleDriveFolderName: {
+            type: String,
+            default: null,
+          },
+          collegeLink: {
+            type: String,
+            default: null,
+          },
+          // Per-day Google Drive folder mapping created when a college is assigned.
+          // Each entry stores the Day folder id plus its Attendance / Geo Tag /
+          // Excel Sheet subfolder ids so trainer daily uploads route correctly.
+          dayFolders: {
+            type: [
+              {
+                day: { type: Number, required: true },
+                dayFolderId: { type: String, default: null },
+                attendance: { type: String, default: null },
+                geo_tag: { type: String, default: null },
+                excel_sheet: { type: String, default: null },
+              },
+            ],
+            default: [],
+          },
+          assignedDate: {
+            type: Date,
+            default: Date.now,
+          },
+          active: {
+            type: Boolean,
+            default: true,
+          },
+          status: {
+            type: String,
+            enum: ['active', 'completed'],
+            default: 'active',
+          },
+        },
+      ],
+      default: [],
+    },
     trainerId: {
       type: String,
       unique: true,
@@ -300,9 +357,9 @@ trainerSchema.pre("save", async function (next) {
   next();
 });
 
-// Auto-generate trainerId as MBK001, MBK002, ... once registration is verified
+// Auto-generate trainerId as MBK001, MBK002, ... if missing
 trainerSchema.pre("save", async function (next) {
-  if (!this.trainerId && (this.emailVerified || this.status === "APPROVED")) {
+  if (!this.trainerId) {
     try {
       this.trainerId = await createUniqueTrainerCode();
     } catch (error) {
@@ -312,6 +369,6 @@ trainerSchema.pre("save", async function (next) {
   next();
 });
 
-const Trainer = mongoose.model("Trainer", trainerSchema);
+const Trainer = mongoose.models.Trainer || mongoose.model("Trainer", trainerSchema);
 
 module.exports = Trainer;

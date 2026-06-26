@@ -13,7 +13,8 @@ const {
   NdaTemplate,
   City,
 } = require("../models");
-const { authenticate } = require("../middleware/auth");
+const { authenticate, authenticateOptional } = require("../middleware/auth");
+const jwt = require('jsonwebtoken');
 const bcrypt = require("bcryptjs");
 const {
   sendAccountVerificationSuccessEmail,
@@ -88,6 +89,89 @@ const PROFILE_PICTURE_MIME_EXTENSION_MAP = {
 
 const resolveGeneratedFilePath = (relativePath = "") =>
   path.join(__dirname, "..", String(relativePath || "").replace(/^\/+/, ""));
+
+const documentKeyMap = {
+  aadhar_front: "aadharFront",
+  aadhar_back: "aadharBack",
+  pan: "pan",
+  bank_passbook: "passbook",
+  degree_certificate: "degreePdf",
+  resume: "resumePdf",
+  selfie_photo: "selfiePhoto",
+  passport_photo: "passportPhoto",
+  aadhar: "aadhar",
+  selfiePhoto: "selfiePhoto",
+  passportPhoto: "passportPhoto",
+};
+
+const getDocumentKeysForType = (documentType) => {
+  const normalized = String(documentType || "").trim();
+  if (!normalized) return [];
+
+  if (normalized === "aadhar") {
+    return ["aadharFront", "aadharBack"];
+  }
+
+  const mapped = documentKeyMap[normalized];
+  return mapped ? [mapped] : [];
+};
+
+const setTrainerDocumentVerification = (trainer, key, verified = false, reason = null) => {
+  if (!trainer.documents) trainer.documents = {};
+  if (!trainer.documents.verification) trainer.documents.verification = {};
+
+  const entry = {
+    verified,
+    reason: reason || null,
+    updatedAt: new Date(),
+  };
+
+  if (trainer.documents.verification instanceof Map) {
+    trainer.documents.verification.set(key, entry);
+  } else {
+    trainer.documents.verification[key] = entry;
+  }
+};
+
+const buildVerificationKey = (documentType) => {
+  const normalized = String(documentType || "").trim();
+  return documentKeyMap[normalized] || null;
+};
+
+const normalizeRole = (value = "") => String(value || "").trim().toLowerCase();
+const isTrainerRole = (role) => normalizeRole(role) === "trainer";
+const isSuperAdminRole = (role) => normalizeRole(role) === "superadmin";
+
+const buildDriveDocumentFileName = (documentKey, originalName) => {
+  const extension = path.extname(String(originalName || "")).toLowerCase();
+  return `${documentKey}${extension}`;
+};
+
+const buildVerificationKeys = (documentType) => getDocumentKeysForType(documentType);
+
+const buildRequiredDocumentKeys = () => [
+  "aadharFront",
+  "aadharBack",
+  "pan",
+  "passbook",
+  "degreePdf",
+  "resumePdf",
+];
+
+const isTrainerDocumentVerified = (trainer, key) => {
+  const verification = trainer.documents?.verification;
+  if (!verification) return false;
+  if (verification instanceof Map) {
+    return verification.get(key)?.verified === true;
+  }
+  return verification[key]?.verified === true;
+};
+
+const buildDocumentVerificationMetadata = (documentType, verified, rejectionReason) => ({
+  verified,
+  reason: verified ? null : rejectionReason || null,
+  updatedAt: new Date(),
+});
 
 const buildProfilePictureDriveFileName = (file = {}) => {
   const extension =
@@ -167,11 +251,16 @@ const getPersistedRegistrationState = (requestedStep, source = {}) => {
 };
 
 const getCurrentNdaTemplate = async () => {
-  const template = await NdaTemplate.findOne({ key: NDA_TEMPLATE_KEY })
-    .populate("updatedBy", "name email")
-    .lean();
+  try {
+    const template = await NdaTemplate.findOne({ key: NDA_TEMPLATE_KEY })
+      .populate("updatedBy", "name email")
+      .lean();
 
-  return normalizeNdaTemplate(template || DEFAULT_NDA_TEMPLATE);
+    return normalizeNdaTemplate(template || DEFAULT_NDA_TEMPLATE);
+  } catch (error) {
+    console.warn("[NDA TEMPLATE] Falling back to default template due to error:", error?.message || error);
+    return normalizeNdaTemplate(DEFAULT_NDA_TEMPLATE);
+  }
 };
 
 const ensureTrainerDriveFolder = async (trainer) => {
@@ -206,8 +295,9 @@ const syncTrainerNdaAgreementPdfToDrive = async (trainer) => {
   let driveUpload = null;
   let trainerDocumentsFolder = null;
   let trainerDriveFolder = null;
-
+  
   try {
+    
     const hierarchy = await ensureTrainerDocumentHierarchy({
       trainer,
       persistTrainer: true,
@@ -273,6 +363,7 @@ const syncTrainerNdaAgreementPdfToDrive = async (trainer) => {
     existingNDADoc.driveFileId !== driveUpload.fileId
   ) {
     try {
+      console.log('[UPLOAD] Cleaning up previous NDA Drive file:', existingNDADoc.driveFileId);
       await deleteFromDrive(existingNDADoc.driveFileId);
     } catch (cleanupError) {
       console.warn(
@@ -1232,6 +1323,25 @@ router.post("/submit", async (req, res) => {
         .json({ success: false, message: "Trainer not found" });
     }
 
+    if (
+      String(trainer.registrationStatus || "").toLowerCase() === "under_review" ||
+      String(trainer.registrationStatus || "").toLowerCase() === "approved" ||
+      Number(trainer.registrationStep || 0) >= 6
+    ) {
+      return res.json({
+        success: true,
+        message:
+          String(trainer.registrationStatus || "").toLowerCase() === "approved"
+            ? "Registration is already approved."
+            : "Registration is already submitted and pending admin review.",
+        status: trainer.registrationStatus || "under_review",
+        registrationStep: trainer.registrationStep || 6,
+        ndaAgreementPdf: trainer.ndaAgreementPdf || trainer.documents?.ndaAgreement || null,
+        ntaAgreementPdf: trainer.ntaAgreementPdf || trainer.documents?.ndaAgreement || null,
+        NDAAgreementPdf: trainer.NDAAgreementPdf || trainer.documents?.ndaAgreement || null,
+      });
+    }
+
     const stepAccess = await ensureTrainerStepAccess(res, trainer, 5);
     if (!stepAccess) {
       return;
@@ -1590,9 +1700,27 @@ const scanFile = require("../middleware/virusScan");
 
 // POST /api/trainers/submit-registration
 // @desc Finalize registration after document upload
-// @access Trainer
-router.post("/submit-registration", authenticate, async (req, res) => {
+// @access Trainer (registration tempToken or accessToken)
+router.post("/submit-registration", authenticateOptional, async (req, res) => {
   try {
+    // Allow registration temp token via body/query/header when authenticateOptional didn't set req.user
+    if (!req.user) {
+      const possibleToken = req.body?.tempToken || req.query?.tempToken || req.headers['x-temp-token'];
+      if (possibleToken) {
+        try {
+          const jwt = require('jsonwebtoken');
+          const secret = process.env.JWT_SECRET || 'your_super_secret_jwt_key_change_in_production';
+          const decoded = jwt.verify(possibleToken, secret);
+          const role = decoded.role || decoded.userRole || decoded.portalRole || null;
+          req.user = { ...decoded, id: decoded.id || decoded.userId, userId: decoded.userId || decoded.id, role };
+        } catch (e) {
+          // invalid token - we'll fall through and return 401 below
+        }
+      }
+    }
+    if (!req.user) {
+      return res.status(401).json({ message: "Authentication required" });
+    }
     if (req.user.role !== "Trainer") {
       return res.status(403).json({ message: "Access denied. Trainers only." });
     }
@@ -1662,20 +1790,84 @@ router.post("/submit-registration", authenticate, async (req, res) => {
 });
 
 // POST /api/trainers/upload-document
-// @desc Upload a document for a trainer
-// @access Trainer, Super Admin
+// @desc Upload a document for a trainer during registration or after approval
+// @access Trainer (registration tempToken or accessToken), Super Admin
 router.post(
   "/upload-document",
-  authenticate,
+  authenticateOptional,
   upload.single("file"),
   scanFile,
   async (req, res) => {
     try {
-      const { trainerId, documentType } = req.body;
+      const { documentType } = req.body;
+      let { trainerId } = req.body;
       const file = req.file;
 
       if (!file) {
         return res.status(400).json({ message: "No file uploaded" });
+      }
+
+      // If authenticateOptional didn't populate req.user, allow a registration temp token
+      if (!req.user) {
+        const possibleToken = req.body?.tempToken || req.query?.tempToken || req.headers['x-temp-token'];
+        if (possibleToken) {
+          try {
+            const jwt = require('jsonwebtoken');
+            const secret = process.env.JWT_SECRET || 'your_super_secret_jwt_key_change_in_production';
+            const decoded = jwt.verify(possibleToken, secret);
+            const role =
+              decoded.role ||
+              decoded.userRole ||
+              decoded.portalRole ||
+              decoded.portal_role ||
+              decoded.roleLabel ||
+              decoded.portalRoleLabel ||
+              null;
+            req.user = {
+              ...decoded,
+              id: decoded.id || decoded.userId,
+              userId: decoded.userId || decoded.id,
+              role: normalizeRole(role),
+            };
+          } catch (e) {
+            return res.status(401).json({ message: 'Invalid or expired tempToken' });
+          }
+        }
+      }
+
+      if (!req.user) {
+        return res.status(401).json({ message: 'Authentication required' });
+      }
+
+      if (!(isTrainerRole(req.user.role) || isSuperAdminRole(req.user.role))) {
+        return res.status(403).json({ message: 'Access denied. Trainers or Super Admin only.' });
+      }
+
+      // Allow resolving trainerId from the authenticated user's profile
+      if (!trainerId && req.user && isTrainerRole(req.user.role)) {
+        const trainerProfile = await Trainer.findOne({ userId: req.user.id });
+        if (trainerProfile) {
+          trainerId = trainerProfile._id.toString();
+        }
+      }
+
+      // Allow resolving trainerId from a posted trainerEmail (useful for tempToken flows)
+      if (!trainerId && req.body?.trainerEmail) {
+        const trainerByEmail = await Trainer.findOne({ email: String(req.body.trainerEmail || '').toLowerCase().trim() });
+        if (trainerByEmail) {
+          trainerId = trainerByEmail._id.toString();
+        }
+      }
+
+      if (!trainerId) {
+        return res.status(400).json({ message: "Missing trainerId" });
+      }
+
+      if (req.user && isTrainerRole(req.user.role)) {
+        const trainerProfile = await Trainer.findOne({ userId: req.user.id });
+        if (!trainerProfile || trainerProfile._id.toString() !== trainerId) {
+          return res.status(403).json({ message: "Access denied" });
+        }
       }
 
       // Validate document type
@@ -1694,7 +1886,7 @@ router.post(
       // Find trainer
       // If user is Trainer, ensure they are uploading for themselves
       let query = { _id: trainerId };
-      if (req.user.role === "Trainer") {
+      if (req.user && req.user.role === "Trainer") {
         const trainerProfile = await Trainer.findOne({ userId: req.user.id });
         if (!trainerProfile || trainerProfile._id.toString() !== trainerId) {
           return res.status(403).json({ message: "Access denied" });
@@ -1706,49 +1898,91 @@ router.post(
         return res.status(404).json({ message: "Trainer not found" });
       }
 
-      // Update document path
-      const filePath = `/uploads/trainer-documents/${file.filename}`;
-
-      if (documentType === "aadhar_front") {
-        trainer.documents.aadhar = trainer.documents.aadhar || {};
-        trainer.documents.aadhar.front = filePath;
-        trainer.documents.aadhar.verified = false;
-      } else if (documentType === "aadhar_back") {
-        trainer.documents.aadhar = trainer.documents.aadhar || {};
-        trainer.documents.aadhar.back = filePath;
-        trainer.documents.aadhar.verified = false;
-      } else if (documentType === "pan") {
-        trainer.documents.pan = trainer.documents.pan || {};
-        trainer.documents.pan.file = filePath;
-        trainer.documents.pan.verified = false;
-      } else if (documentType === "bank_passbook") {
-        trainer.documents.bank = trainer.documents.bank || {};
-        trainer.documents.bank.passbook = filePath;
-        trainer.documents.bank.verified = false;
-      } else if (documentType === "degree_certificate") {
-        trainer.documents.degreeCertificate =
-          trainer.documents.degreeCertificate || {};
-        trainer.documents.degreeCertificate.file = filePath;
-        trainer.documents.degreeCertificate.verified = false;
-      } else if (documentType === "resume") {
-        trainer.documents.resume = trainer.documents.resume || {};
-        trainer.documents.resume.file = filePath;
-        trainer.documents.resume.verified = false;
+      const documentKey = buildVerificationKey(documentType);
+      if (!documentKey) {
+        return res.status(400).json({ message: "Invalid document type" });
       }
 
-      // Only set to PENDING if not in initial registration flow (which uses submit-registration)
-      // Or if it's already VERIFIED/REJECTED and they are re-uploading
+      const fileBuffer = await fs.readFile(file.path);
+      const documentFileName = buildDriveDocumentFileName(
+        documentKey,
+        file.originalname,
+      );
+
+      let fileUrl = `/uploads/trainer-documents/${file.filename}`;
+      let driveUpload = null;
+      let documentsFolder = null;
+
+      try {
+        const hierarchy = await ensureTrainerDocumentHierarchy({
+          trainer,
+          persistTrainer: true,
+          syncExistingDocuments: true,
+        });
+        documentsFolder = hierarchy.documentsFolder;
+
+        driveUpload = await uploadToDrive({
+          fileBuffer,
+          mimeType: file.mimetype,
+          originalName: file.originalname,
+          folderId: documentsFolder?.id,
+          fileName: documentFileName,
+          replaceExistingFile: true,
+          cleanupDuplicateFiles: true,
+        });
+
+        if (driveUpload?.fileUrl) {
+          fileUrl = driveUpload.fileUrl;
+        }
+      } catch (driveError) {
+        console.error(
+          "[GOOGLE-DRIVE] Document upload failed, falling back to local storage:",
+          driveError.message,
+        );
+        // Keep the local file already saved by multer and continue.
+      }
+
+      trainer.documents = trainer.documents || {};
+      trainer.documents[documentKey] = fileUrl;
+      setTrainerDocumentVerification(trainer, documentKey, false, null);
+
       if (trainer.verificationStatus !== "NOT_SUBMITTED") {
         trainer.verificationStatus = "PENDING";
       }
 
       await trainer.save();
 
+      await TrainerDocument.findOneAndUpdate(
+        {
+          trainerId: trainer._id,
+          documentType: documentKey,
+        },
+        {
+          $set: {
+            trainerId: trainer._id,
+            documentType: documentKey,
+            fileName: driveUpload?.fileName || documentFileName,
+            filePath: fileUrl,
+            driveFileId: driveUpload?.fileId || null,
+            driveViewLink: driveUpload?.webViewLink || null,
+            driveDownloadLink: driveUpload?.downloadLink || null,
+            driveFolderId: documentsFolder?.id || null,
+            driveFolderName: documentsFolder?.name || null,
+            fileSize: file.size || null,
+            mimeType: file.mimetype || null,
+            verificationStatus: "PENDING",
+          },
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true },
+      );
+
       res.json({
         success: true,
-        message: "Document uploaded successfully",
+        message: driveUpload
+          ? "Document uploaded successfully to Google Drive"
+          : "Document uploaded successfully; saved locally because Google Drive upload was not available",
         data: {
-          filePath,
+          filePath: fileUrl,
           documentType,
           verificationStatus: "Pending",
         },
@@ -1779,38 +2013,26 @@ router.put("/:id/verify-document", authenticate, async (req, res) => {
       return res.status(404).json({ message: "Trainer not found" });
     }
 
-    const updateData = {
-      verified,
-      verifiedAt: new Date(),
-      verifiedBy: req.user.id,
-      rejectionReason: verified ? null : rejectionReason,
-    };
-
-    if (documentType === "aadhar") {
-      Object.assign(trainer.documents.aadhar, updateData);
-    } else if (documentType === "pan") {
-      Object.assign(trainer.documents.pan, updateData);
-    } else if (documentType === "bank") {
-      Object.assign(trainer.documents.bank, updateData);
-    } else if (documentType === "degree_certificate") {
-      Object.assign(trainer.documents.degreeCertificate, updateData);
-    } else {
+    const keys = buildVerificationKeys(documentType);
+    if (!keys.length) {
       return res.status(400).json({ message: "Invalid document type" });
     }
 
-    // Check overall status
-    const allVerified =
-      trainer.documents.aadhar.verified &&
-      trainer.documents.pan.verified &&
-      trainer.documents.bank.verified &&
-      trainer.documents.degreeCertificate.verified;
+    keys.forEach((key) => {
+      setTrainerDocumentVerification(
+        trainer,
+        key,
+        Boolean(verified),
+        verified ? null : rejectionReason,
+      );
+    });
+
+    const allVerified = buildRequiredDocumentKeys().every((key) =>
+      isTrainerDocumentVerified(trainer, key),
+    );
 
     if (allVerified) {
       trainer.verificationStatus = "VERIFIED";
-    } else if (!verified) {
-      // If any doc is rejected, overall status is rejected (or pending retry)
-      // For now, let's keep it simple
-      // If explicitly rejected, we might want to set overall to rejected or pending
     }
 
     await trainer.save();
@@ -1855,13 +2077,19 @@ router.put("/:id/verify-doc-detail", authenticate, async (req, res) => {
       );
     }
 
-    // Update the new granular verification fields
-    const updateFields = {
-      [`documents.verification.${documentType}.verified`]: verified,
-      [`documents.verification.${documentType}.reason`]: verified
+    const verificationKeys = buildVerificationKeys(documentType);
+    if (!verificationKeys.length) {
+      return res.status(400).json({ message: "Invalid document type" });
+    }
+
+    const updateFields = {};
+    verificationKeys.forEach((key) => {
+      updateFields[`documents.verification.${key}.verified`] = verified;
+      updateFields[`documents.verification.${key}.reason`] = verified
         ? null
-        : rejectionReason,
-    };
+        : rejectionReason;
+      updateFields[`documents.verification.${key}.updatedAt`] = new Date();
+    });
 
     const updatedTrainer = await Trainer.findByIdAndUpdate(
       trainer._id,

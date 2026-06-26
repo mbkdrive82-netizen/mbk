@@ -84,31 +84,61 @@ const sendEmailOtp = async ({
   );
 
   let deliveryMode = "email";
-  try {
-    await sendRegistrationOTP(normalizedEmail, recipientName, rawOtp);
-  } catch (emailError) {
-    if (process.env.NODE_ENV === "production") {
-      const err = new Error(
-        emailError?.message || "Failed to deliver OTP to your email address",
-      );
-      err.statusCode = 502;
-      throw err;
-    }
+  let debugOtp = null;
+  const allowDebugMode = String(process.env.ALLOW_OTP_DEBUG || "").trim() === "1";
+
+  if (allowDebugMode) {
     deliveryMode = "debug";
-    console.warn(
-      "[AUTH-OTP] Email delivery failed in non-production:",
-      emailError?.message || emailError,
+    debugOtp = rawOtp;
+    console.log(
+      '[AUTH-OTP] ALLOW_OTP_DEBUG=1 enabled — returning debug OTP without SMTP send',
     );
+  } else {
+    try {
+      const sendResult = await sendRegistrationOTP(normalizedEmail, recipientName, rawOtp);
+      if (!sendResult.success) {
+        if (process.env.NODE_ENV === "production") {
+          const err = new Error(
+            sendResult.error || "Failed to deliver OTP to your email address",
+          );
+          err.statusCode = 502;
+          throw err;
+        }
+        deliveryMode = "debug";
+        debugOtp = rawOtp;
+        console.warn(
+          "[AUTH-OTP] Email delivery failed in non-production:",
+          sendResult.error || "unknown error",
+        );
+      }
+    } catch (emailError) {
+      if (process.env.NODE_ENV === "production") {
+        const err = new Error(
+          emailError?.message || "Failed to deliver OTP to your email address",
+        );
+        err.statusCode = 502;
+        throw err;
+      }
+      deliveryMode = "debug";
+      debugOtp = rawOtp;
+      console.warn(
+        "[AUTH-OTP] Email delivery failed in non-production:",
+        emailError?.message || emailError,
+      );
+    }
   }
 
-  return {
+  const result = {
     email: normalizedEmail,
     expiresAt,
     deliveryMode,
-    ...(deliveryMode === "debug" && process.env.ALLOW_OTP_DEBUG === "1"
-      ? { debugOtp: rawOtp }
-      : {}),
   };
+
+  if (debugOtp) {
+    result.debugOtp = debugOtp;
+  }
+
+  return result;
 };
 
 /**

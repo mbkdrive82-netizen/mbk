@@ -76,21 +76,16 @@ export default function CompanyDashboard() {
     let cancelled = false;
     const load = async () => {
       try {
-        setLoading(true);
         setError("");
-        const [profileRes, metricsRes, monitoringRes] = await Promise.all([
-          companyPortalService.getProfile(),
-          companyPortalService.getDashboardMetrics().catch(() => null),
-          companyPortalService.getTodayMonitoring().catch(() => null),
-        ]);
-
+        // Only block the dashboard on the lightweight profile call so the page
+        // appears immediately. Metrics + monitoring (heavier aggregations) are
+        // loaded in the background and fill in when ready.
+        const profileRes = await companyPortalService.getProfile();
         if (cancelled) return;
 
-        if (profileRes.success) setProfile(profileRes.company);
-        if (metricsRes?.success) setMetrics(metricsRes.data);
-        if (monitoringRes?.success) setMonitoring(monitoringRes.data || []);
-
-        if (!profileRes.success) {
+        if (profileRes.success) {
+          setProfile(profileRes.company);
+        } else {
           setError(profileRes.message || "Failed to load company profile");
         }
       } catch {
@@ -100,7 +95,19 @@ export default function CompanyDashboard() {
       }
     };
 
+    // Background (non-blocking) secondary data.
+    const loadSecondary = async () => {
+      const [metricsRes, monitoringRes] = await Promise.all([
+        companyPortalService.getDashboardMetrics().catch(() => null),
+        companyPortalService.getTodayMonitoring().catch(() => null),
+      ]);
+      if (cancelled) return;
+      if (metricsRes?.success) setMetrics(metricsRes.data);
+      if (monitoringRes?.success) setMonitoring(monitoringRes.data || []);
+    };
+
     load();
+    loadSecondary();
     return () => {
       cancelled = true;
     };
@@ -179,6 +186,7 @@ export default function CompanyDashboard() {
 
       await scheduleService.createSchedule({
         trainerId: scheduleForm.trainerId,
+        companyId: profile?._id || profile?.id || undefined,
         collegeId: scheduleForm.collegeId,
         courseId: scheduleForm.courseId || undefined,
         scheduledDate: scheduleForm.scheduledDate,

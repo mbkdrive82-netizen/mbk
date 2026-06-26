@@ -13,6 +13,38 @@ const redactMongoUri = (uri = "") => {
   }
 };
 
+// Background reconnect loop. Mongoose's automatic reconnection only kicks in
+// AFTER a first successful connection; if the very first connect fails (e.g. a
+// DNS/network blip at startup) the app would otherwise stay permanently in
+// "offline mode" until a manual restart. This keeps retrying in the background
+// so the app self-heals once connectivity returns.
+let reconnectTimer = null;
+
+const startBackgroundReconnect = (mongoUri, connectOptions) => {
+  if (reconnectTimer || !mongoUri) return;
+  const RETRY_MS = 10000;
+
+  const attempt = async () => {
+    reconnectTimer = null;
+    // readyState: 0 = disconnected, 1 = connected, 2 = connecting, 3 = disconnecting
+    if (mongoose.connection.readyState === 1) return;
+    if (mongoose.connection.readyState === 2) {
+      reconnectTimer = setTimeout(attempt, RETRY_MS);
+      return;
+    }
+    try {
+      await mongoose.connect(mongoUri, connectOptions);
+      console.log('✅ MongoDB connected successfully (background retry)');
+    } catch (err) {
+      const msg = err && err.message ? err.message : String(err);
+      console.warn(`⏳ MongoDB still unreachable, retrying in ${RETRY_MS / 1000}s: ${msg}`);
+      reconnectTimer = setTimeout(attempt, RETRY_MS);
+    }
+  };
+
+  reconnectTimer = setTimeout(attempt, RETRY_MS);
+};
+
 const connectToDatabase = async () => {
   const atlasUri = process.env.MONGO_URI?.trim();
   const localUri = process.env.MONGO_URI_LOCAL?.trim();
@@ -109,6 +141,7 @@ const connectToDatabase = async () => {
         const allowOffline = (process.env.ALLOW_OFFLINE === '1') || (process.env.NODE_ENV !== 'production');
         if (allowOffline) {
           console.warn('⚠️ Continuing without MongoDB (offline mode enabled)');
+          startBackgroundReconnect(mongoUri, connectOptions);
           return { mongoose: null, selectedMongoUri: localUri };
         }
         throw fallbackErr;
@@ -119,6 +152,7 @@ const connectToDatabase = async () => {
     const allowOffline = (process.env.ALLOW_OFFLINE === '1') || (process.env.NODE_ENV !== 'production');
     if (allowOffline) {
       console.warn('⚠️ Continuing without MongoDB (offline mode enabled)');
+      startBackgroundReconnect(mongoUri, connectOptions);
       return { mongoose: null, selectedMongoUri: mongoUri };
     }
 

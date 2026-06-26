@@ -43,6 +43,9 @@ import useDebouncedValue from "@/hooks/useDebouncedValue";
 import notify from "@/lib/toast";
 import getErrorMessage from "@/lib/getErrorMessage";
 import RenderProfiler from "@/shared/perf/RenderProfiler";
+import { useScheduleAssociationsQuery } from "@/modules/schedules";
+import scheduleService from "@/services/scheduleService";
+import SearchableDropdown from "@/components/SearchableDropdown";
 import {
   ADMIN_PENDING_USERS_KEY,
   ADMIN_TRAINERS_KEY,
@@ -210,6 +213,17 @@ const getTrainerPreviewImageCandidates = (trainer = {}) => {
   );
 };
 
+const INITIAL_SCHEDULE_FORM = {
+  trainerId: "",
+  collegeId: "",
+  courseId: "",
+  scheduledDate: "",
+  startTime: "",
+  endTime: "",
+  dayNumber: 1,
+  subject: "",
+};
+
 const normalizeTrainerRow = (trainer = {}) => {
   const workflow = buildWorkflowSummary(trainer);
   const previewImageCandidates = getTrainerPreviewImageCandidates(trainer);
@@ -338,9 +352,17 @@ const TrainerList = () => {
   const [exportingType, setExportingType] = useState("");
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+  const [scheduleForm, setScheduleForm] = useState(INITIAL_SCHEDULE_FORM);
+  const [scheduleSubmitting, setScheduleSubmitting] = useState(false);
+  const [scheduleError, setScheduleError] = useState("");
+  const [scheduleSuccess, setScheduleSuccess] = useState("");
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [trainerToDelete, setTrainerToDelete] = useState(null);
   const debouncedSearchTerm = useDebouncedValue(searchTerm, SEARCH_DEBOUNCE_MS);
+
+  const associationsQuery = useScheduleAssociationsQuery({ enabled: isScheduleModalOpen });
+  const scheduleAssociations = associationsQuery.data || { companies: [], courses: [], colleges: [], departments: [] };
   const normalizedSearchNeedle = useMemo(
     () => String(debouncedSearchTerm || "").trim().toLowerCase(),
     [debouncedSearchTerm],
@@ -499,14 +521,12 @@ const TrainerList = () => {
       ],
       review: activeTrainers.filter(
         (trainer) =>
-          ["under_review", "uploaded"].includes(trainer.workflow.documentStatus) ||
-          (trainer.workflow.documentStatus === "approved" &&
-            !isTrainerFinallyApproved(trainer)),
+          !isTrainerFinallyApproved(trainer) &&
+          (['under_review', 'uploaded'].includes(trainer.workflow.documentStatus) ||
+            trainer.workflow.documentStatus === 'approved'),
       ),
-      approved: activeTrainers.filter(
-        (trainer) =>
-          trainer.workflow.documentStatus === "approved" &&
-          isTrainerFinallyApproved(trainer),
+      approved: activeTrainers.filter((trainer) =>
+        isTrainerFinallyApproved(trainer),
       ),
       deactivated,
     };
@@ -1011,8 +1031,11 @@ const TrainerList = () => {
 
   const currentViewMeta = VIEW_META[viewMode];
   const showReviewQueueStatusColumns = viewMode !== "review";
-  const loading =
-    isSuperAdminView && (trainersQuery.isLoading || pendingUsersQuery.isLoading);
+  // Only block the table on the PRIMARY trainer list query. The pending-signups
+  // query is a secondary augmentation of the "pending" queue; if it is slow (or
+  // hanging) it must NOT keep the whole list hidden behind the spinner after the
+  // trainers themselves have already loaded.
+  const loading = isSuperAdminView && trainersQuery.isLoading;
 
   if (!isSuperAdminView) {
     return (
@@ -1083,6 +1106,22 @@ const TrainerList = () => {
             >
               {exportingType === "pdf" ? "Exporting..." : "PDF"}
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                setScheduleError("");
+                setScheduleSuccess("");
+                setScheduleForm((prev) => ({
+                  ...INITIAL_SCHEDULE_FORM,
+                  trainerId:
+                    selectedTrainer?.id || selectedTrainer?._id || prev.trainerId || "",
+                }));
+                setIsScheduleModalOpen(true);
+              }}
+              className="rounded border border-gray-300 bg-white px-3 py-1.5 font-calibri text-xs font-bold text-slate-700 transition hover:bg-gray-50"
+            >
+              Schedule
+            </button>
           </div>
 
           <div className="relative">
@@ -1100,6 +1139,250 @@ const TrainerList = () => {
         </div>
       </div>
 
+      {isScheduleModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => setIsScheduleModalOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="relative z-10 w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Create Trainer Schedule</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Create a new schedule entry for one of your trainers.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsScheduleModalOpen(false)}
+                className="rounded-full border border-slate-200 bg-white p-2 text-slate-500 transition hover:bg-slate-50 hover:text-slate-700"
+              >
+                ✕
+              </button>
+            </div>
+            <form
+              onSubmit={async (event) => {
+                event.preventDefault();
+                setScheduleError("");
+                setScheduleSuccess("");
+
+                if (!scheduleForm.trainerId || !scheduleForm.collegeId || !scheduleForm.scheduledDate || !scheduleForm.startTime || !scheduleForm.endTime) {
+                  setScheduleError("Please select a trainer, college, date, and specify both start and end times.");
+                  return;
+                }
+
+                try {
+                  setScheduleSubmitting(true);
+                  const userStr = typeof window !== "undefined" ? localStorage.getItem("user") : null;
+                  const user = userStr ? JSON.parse(userStr) : null;
+
+                  await scheduleService.createSchedule({
+                    trainerId: scheduleForm.trainerId,
+                    collegeId: scheduleForm.collegeId,
+                    courseId: scheduleForm.courseId || undefined,
+                    scheduledDate: scheduleForm.scheduledDate,
+                    startTime: scheduleForm.startTime || undefined,
+                    endTime: scheduleForm.endTime || undefined,
+                    dayNumber: parseInt(scheduleForm.dayNumber, 10) || 1,
+                    subject: scheduleForm.subject || undefined,
+                    createdBy: user?.id,
+                  });
+
+                  setScheduleSuccess("Schedule created successfully!");
+                  setScheduleForm(INITIAL_SCHEDULE_FORM);
+                  notify.success("Schedule created successfully!");
+                } catch (error) {
+                  console.error("Error creating schedule:", error);
+                  setScheduleError(
+                    getErrorMessage(error, "Failed to create schedule. Please try again."),
+                  );
+                } finally {
+                  setScheduleSubmitting(false);
+                }
+              }}
+              className="space-y-4 px-6 pb-6 pt-4"
+            >
+              {scheduleError ? (
+                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {scheduleError}
+                </div>
+              ) : null}
+              {scheduleSuccess ? (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                  {scheduleSuccess}
+                </div>
+              ) : null}
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <SearchableDropdown
+                  label="Trainer"
+                  id="schedule-trainer"
+                  options={trainerRows}
+                  value={scheduleForm.trainerId}
+                  onChange={(trainer) =>
+                    setScheduleForm((prev) => ({
+                      ...prev,
+                      trainerId: trainer?.id || trainer?._id || "",
+                    }))
+                  }
+                  getOptionLabel={(trainer) => trainer.displayName || "Unnamed Trainer"}
+                  getOptionValue={(trainer) => trainer.id || trainer._id}
+                  searchFields={["displayName", "displayEmail", "displayCity", "displayReference"]}
+                  showSearch={true}
+                  error={scheduleError && !scheduleForm.trainerId ? "Trainer is required" : ""}
+                />
+                <div>
+                  <label htmlFor="schedule-college" className="block text-sm font-semibold text-slate-700">
+                    College
+                  </label>
+                  <select
+                    id="schedule-college"
+                    name="collegeId"
+                    value={scheduleForm.collegeId}
+                    onChange={(event) =>
+                      setScheduleForm((prev) => ({ ...prev, collegeId: event.target.value }))
+                    }
+                    className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  >
+                    <option value="">Select college</option>
+                    {scheduleAssociations.colleges.map((college) => (
+                      <option key={college.id || college._id || college.name} value={college.id || college._id}>
+                        {college.name || college.title || "College"}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="schedule-course" className="block text-sm font-semibold text-slate-700">
+                    Course
+                  </label>
+                  <select
+                    id="schedule-course"
+                    name="courseId"
+                    value={scheduleForm.courseId}
+                    onChange={(event) =>
+                      setScheduleForm((prev) => ({ ...prev, courseId: event.target.value }))
+                    }
+                    className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  >
+                    <option value="">Select course (optional)</option>
+                    {scheduleAssociations.courses.map((course) => (
+                      <option key={course.id || course._id || course.name} value={course.id || course._id}>
+                        {course.name || course.title || "Course"}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="schedule-date" className="block text-sm font-semibold text-slate-700">
+                    Scheduled Date
+                  </label>
+                  <input
+                    id="schedule-date"
+                    name="scheduledDate"
+                    type="date"
+                    value={scheduleForm.scheduledDate}
+                    onChange={(event) =>
+                      setScheduleForm((prev) => ({ ...prev, scheduledDate: event.target.value }))
+                    }
+                    className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div>
+                  <label htmlFor="schedule-start" className="block text-sm font-semibold text-slate-700">
+                    Start Time
+                  </label>
+                  <input
+                    id="schedule-start"
+                    name="startTime"
+                    type="time"
+                    required
+                    value={scheduleForm.startTime}
+                    onChange={(event) =>
+                      setScheduleForm((prev) => ({ ...prev, startTime: event.target.value }))
+                    }
+                    className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="schedule-end" className="block text-sm font-semibold text-slate-700">
+                    End Time
+                  </label>
+                  <input
+                    id="schedule-end"
+                    name="endTime"
+                    type="time"
+                    required
+                    value={scheduleForm.endTime}
+                    onChange={(event) =>
+                      setScheduleForm((prev) => ({ ...prev, endTime: event.target.value }))
+                    }
+                    className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="schedule-day" className="block text-sm font-semibold text-slate-700">
+                    Day Number
+                  </label>
+                  <input
+                    id="schedule-day"
+                    name="dayNumber"
+                    type="number"
+                    min="1"
+                    value={scheduleForm.dayNumber}
+                    onChange={(event) =>
+                      setScheduleForm((prev) => ({ ...prev, dayNumber: event.target.value }))
+                    }
+                    className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="schedule-subject" className="block text-sm font-semibold text-slate-700">
+                  Subject / Notes
+                </label>
+                <input
+                  id="schedule-subject"
+                  name="subject"
+                  type="text"
+                  value={scheduleForm.subject}
+                  onChange={(event) =>
+                    setScheduleForm((prev) => ({ ...prev, subject: event.target.value }))
+                  }
+                  className="mt-2 block w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  placeholder="Session subject / activity name"
+                />
+              </div>
+
+              <div className="flex flex-col gap-3 pt-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsScheduleModalOpen(false)}
+                  className="inline-flex justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={scheduleSubmitting}
+                  className="inline-flex justify-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {scheduleSubmitting ? "Creating…" : "Create Schedule"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {trainerDashboardStats.map((stat) => {
           const Icon = stat.icon;

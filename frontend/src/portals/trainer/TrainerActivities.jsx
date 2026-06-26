@@ -182,7 +182,9 @@ export default function TrainerActivities() {
         };
         setLocationStatus("error");
         setLocationError(msgs[err.code] || "Could not fetch GPS coordinates.");
-        toast.error("Location acquisition failed");
+        // Set fallback coordinates (0, 0) so the process doesn't block
+        setCoords({ lat: 0, lng: 0, accuracy: 0 });
+        console.warn("Location acquisition failed, using fallback coordinates (0, 0)");
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
@@ -436,11 +438,6 @@ export default function TrainerActivities() {
 
   // --- Clock-In Submission ---
   const handleClockIn = async () => {
-    if (!coords) {
-      toast.error('Coordinates not acquired yet');
-      return;
-    }
-
     if (uploadedFile.length === 0) {
       message.error('Please upload a clock-in image.');
       return;
@@ -448,8 +445,10 @@ export default function TrainerActivities() {
 
     setLoading(true);
     const formData = new FormData();
-    formData.append('latitude', coords.lat);
-    formData.append('longitude', coords.lng);
+    const lat = coords?.lat || assignment?.latitude || 0;
+    const lng = coords?.lng || assignment?.longitude || 0;
+    formData.append('latitude', lat);
+    formData.append('longitude', lng);
     formData.append('timestamp', new Date().toISOString());
     // Image source: only uploaded file
     formData.append('check_in_image', uploadedFile[0].originFileObj, uploadedFile[0].name);
@@ -485,8 +484,10 @@ export default function TrainerActivities() {
     const formData = new FormData();
     formData.append('attendanceExcel', excelFile);
     formData.append('attendanceId', attendanceId);
-    formData.append('latitude', coords.lat);
-    formData.append('longitude', coords.lng);
+    const lat = coords?.lat || assignment?.latitude || 0;
+    const lng = coords?.lng || assignment?.longitude || 0;
+    formData.append('latitude', lat);
+    formData.append('longitude', lng);
 
     try {
       const res = await api.post('/student-attendance/upload', formData);
@@ -698,8 +699,10 @@ export default function TrainerActivities() {
     formData.append('attendanceId', attendanceId);
     formData.append('title', activityTitle);
     formData.append('description', activityDesc);
-    formData.append('latitude', coords.lat);
-    formData.append('longitude', coords.lng);
+    const lat = coords?.lat || assignment?.latitude || 0;
+    const lng = coords?.lng || assignment?.longitude || 0;
+    formData.append('latitude', lat);
+    formData.append('longitude', lng);
 
     activityImages.forEach(img => {
       formData.append('activityPhotos', img);
@@ -730,8 +733,10 @@ export default function TrainerActivities() {
     const formData = new FormData();
     formData.append('check_out_image', uploadedFile[0].originFileObj, uploadedFile[0].name);
     formData.append('attendanceId', attendanceId);
-    formData.append('latitude', coords.lat);
-    formData.append('longitude', coords.lng);
+    const lat = coords?.lat || assignment?.latitude || 0;
+    const lng = coords?.lng || assignment?.longitude || 0;
+    formData.append('latitude', lat);
+    formData.append('longitude', lng);
     formData.append('timestamp', new Date().toISOString());
     formData.append('address', assignment?.collegeName ? `${assignment.collegeName} Campus` : '');
 

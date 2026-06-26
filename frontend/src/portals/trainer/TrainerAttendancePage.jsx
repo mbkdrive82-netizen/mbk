@@ -18,6 +18,19 @@ const AttendanceUploadSection = dynamic(
   },
 );
 
+/* ── lazy-load day-wise Drive upload (Attendance + Geo Tag) ─── */
+const DailyDriveUploadSection = dynamic(
+  () => import("./dashboard/DailyDriveUploadSection"),
+  {
+    loading: () => (
+      <section className="rounded-[24px] border border-slate-200 bg-white shadow-sm sm:rounded-[28px]">
+        <div className="h-32 animate-pulse bg-slate-100 rounded-[24px]" />
+      </section>
+    ),
+    ssr: false,
+  },
+);
+
 /* ── lazy-load attendance history (reuse existing backend) ─── */
 const TrainerAttendanceHistory = dynamic(
   () => import("./attendance/TrainerAttendanceHistory"),
@@ -50,6 +63,11 @@ function TrainerAttendancePage() {
           </div>
         </div>
       </section>
+
+      {/* ── day-wise Drive upload (Attendance + Geo Tag) ─────── */}
+      <TrainerCollegeGuard>
+        <DailyDriveUploadSection />
+      </TrainerCollegeGuard>
 
       {/* ── attendance upload form ───────────────────────────── */}
       <TrainerCollegeGuard>

@@ -843,10 +843,12 @@ router.get('/', authenticate, isSPOCAdmin, async (req, res) => {
         const colleges = await College.find(filter)
             .populate({
                 path: 'trainers',
+                strictPopulate: false,
                 populate: {
                     path: 'userId',
-                    select: 'name email'
-                }
+                    select: 'name email',
+                    strictPopulate: false,
+                },
             });
         res.json(colleges);
     } catch (error) {
@@ -1315,6 +1317,36 @@ router.post('/:id/assign-trainers', authenticate, isSPOCAdmin, async (req, res) 
                         if (collegeHierarchy?.collegeFolder?.id) {
                             trainerDoc.collegeDriveFolderId = collegeHierarchy.collegeFolder.id;
                             trainerDoc.collegeDriveFolderName = college.name;
+                            
+                            // Find or create college entry in colleges array
+                            let collegeEntry = trainerDoc.colleges.find(c => String(c.collegeId) === String(college._id));
+                            if (!collegeEntry) {
+                                collegeEntry = {
+                                    collegeId: college._id,
+                                    collegeName: college.name,
+                                    assignedDate: new Date(),
+                                    active: true,
+                                    status: 'active'
+                                };
+                                trainerDoc.colleges.push(collegeEntry);
+                                // Fetch reference
+                                collegeEntry = trainerDoc.colleges[trainerDoc.colleges.length - 1];
+                            }
+                            
+                            collegeEntry.googleDriveFolderId = collegeHierarchy.collegeFolder.id;
+                            collegeEntry.googleDriveFolderName = college.name;
+                            collegeEntry.collegeLink = collegeHierarchy.collegeFolder.link || null;
+                            
+                            if (collegeHierarchy.dayFoldersByDayNumber) {
+                                collegeEntry.dayFolders = Object.entries(collegeHierarchy.dayFoldersByDayNumber).map(([dayNum, folders]) => ({
+                                    day: Number(dayNum),
+                                    dayFolderId: folders.id,
+                                    attendance: folders.attendanceFolder?.id || null,
+                                    geo_tag: folders.geoTagFolder?.id || null,
+                                    excel_sheet: null,
+                                }));
+                            }
+                            
                             await trainerDoc.save();
 
                             // Also save folder ID in TrainerAssignment
@@ -1338,18 +1370,26 @@ router.post('/:id/assign-trainers', authenticate, isSPOCAdmin, async (req, res) 
             const createdSchedules = [];
             if (trainerData.schedules && trainerData.schedules.length > 0) {
                 for (const schedule of trainerData.schedules) {
-                    const newSchedule = await Schedule.create({
-                        trainerId: trainer._id,
-                        collegeId: college._id,
-                        companyId: college.companyId,
-                        courseId: college.courseId,
-                        dayOfWeek: schedule.dayOfWeek,
-                        startTime: schedule.startTime,
-                        endTime: schedule.endTime,
-                        subject: schedule.subject || null,
-                        dayNumber: 1 // Default dayNumber to 1 so that it satisfies validation and is actionable
-                    });
-                    createdSchedules.push(newSchedule);
+                    if (!schedule.startTime || !schedule.endTime) {
+                        console.warn(`[ASSIGN-TRAINERS] Skipping invalid schedule without startTime/endTime for trainer ${trainer._id}`);
+                        continue;
+                    }
+                    try {
+                        const newSchedule = await Schedule.create({
+                            trainerId: trainer._id,
+                            collegeId: college._id,
+                            companyId: college.companyId,
+                            courseId: college.courseId,
+                            dayOfWeek: schedule.dayOfWeek,
+                            startTime: schedule.startTime,
+                            endTime: schedule.endTime,
+                            subject: schedule.subject || null,
+                            dayNumber: 1 // Default dayNumber to 1 so that it satisfies validation and is actionable
+                        });
+                        createdSchedules.push(newSchedule);
+                    } catch (schedErr) {
+                        console.error(`[ASSIGN-TRAINERS] Failed to create schedule:`, schedErr);
+                    }
                 }
             }
 

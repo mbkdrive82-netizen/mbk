@@ -114,23 +114,15 @@ const RoleBasedRedirect = () => {
 
     prefetchPortalRoutes(router, actualRole, currentUser.email);
 
-
-
-    void (async () => {
-
-      try {
-
-        await warmPortalDataBundle();
-
-      } catch (error) {
-
-        console.warn("Portal data warmup failed before navigation:", error);
-
-      }
-
-      safeReplace(targetRoute);
-
-    })();
+    // Navigate immediately, warm data in background
+    safeReplace(targetRoute);
+    
+    // Warm portal data in background (don't block navigation)
+    if (typeof window !== "undefined") {
+      Promise.resolve()
+        .then(() => warmPortalDataBundle())
+        .catch(error => console.warn("Portal data warmup failed (non-blocking):", error));
+    }
 
   }, [loading, currentUser, isAuthenticated, searchParams, router, safeReplace, setAuthUser, isRouterReady]);
 

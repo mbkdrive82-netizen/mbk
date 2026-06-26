@@ -70,6 +70,16 @@ router.post('/trainers/assign-college', trainerController.assignCollegeToTrainer
 router.get('/trainers/:trainerId/colleges', trainerController.getTrainerColleges);
 
 // ============================================
+// COLLEGE ROUTES (admin)
+// ============================================
+
+// Create a college
+router.post('/colleges', trainerController.createCollege);
+
+// List colleges (for assignment selection)
+router.get('/colleges', trainerController.listColleges);
+
+// ============================================
 // UPLOAD ROUTES
 // ============================================
 

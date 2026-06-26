@@ -1,5 +1,6 @@
 import axios from 'axios';
 import fs from 'fs';
+import FormData from 'form-data';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { google } from 'googleapis';
@@ -8,10 +9,13 @@ import dotenv from 'dotenv';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load environment
-dotenv.config({ path: path.join(__dirname, '.env') });
+// Load environment from tests/.env or fallback to backend/.env
+const envFilePath = fs.existsSync(path.join(__dirname, '.env'))
+  ? path.join(__dirname, '.env')
+  : path.join(__dirname, '..', '.env');
+dotenv.config({ path: envFilePath });
 
-const BASE_URL = 'http://localhost:5000';
+const BASE_URL = process.env.TEST_BASE_URL || 'http://localhost:5005';
 const API_TIMEOUT = 10000;
 
 // Test data
@@ -101,15 +105,35 @@ async function main() {
     console.log('\n\n📝 TEST 1: REGISTER TRAINER');
     console.log('─'.repeat(70));
     try {
-      console.log(`Registering trainer: ${trainerData.email}`);
-      const registerRes = await testApiCall('POST', '/api/auth/register', trainerData);
-      console.log('✅ Trainer registered successfully');
-      console.log(`   Trainer ID: ${registerRes.userId || registerRes.id}`);
-      trainerId = registerRes.userId || registerRes.id;
-      trainerToken = registerRes.token;
+      console.log(`Registering trainer (OTP flow): ${trainerData.email}`);
+      // Step A: init trainer registration (sends OTP)
+      const initRes = await testApiCall('POST', '/api/auth/register/trainer', {
+        email: trainerData.email,
+        password: trainerData.password,
+      });
+
+      console.log('→ Registration init response:', initRes.message || 'OK');
+
+      // Prefer debug OTP if available (set ALLOW_OTP_DEBUG=1 in env)
+      const otp = initRes.debugOtp || process.env.FORCE_TEST_OTP || null;
+      if (!otp) {
+        throw new Error('OTP not available in response; set ALLOW_OTP_DEBUG=1 to enable test automation');
+      }
+
+      console.log(`→ Using OTP: ${otp}`);
+
+      // Step B: verify OTP
+      const verifyRes = await testApiCall('POST', '/api/auth/register/trainer/verify-otp', {
+        email: trainerData.email,
+        otp,
+      });
+
+      console.log('✅ OTP verified.');
+      trainerToken = verifyRes.tempToken || verifyRes.token || '';
+      trainerId = verifyRes.user?._id || verifyRes.userId || '';
     } catch (error) {
-      console.error('❌ Trainer registration failed:', error.message);
-      console.log('\n💡 Trying alternative registration endpoint...');
+      console.error('❌ Trainer registration (OTP) failed:', error.message);
+      console.log('\n💡 Trying alternative legacy registration endpoint...');
       try {
         const altRes = await testApiCall('POST', '/api/trainers/register', trainerData);
         console.log('✅ Trainer registered (alternative endpoint)');
@@ -165,13 +189,15 @@ async function main() {
 
       const formData = new FormData();
       formData.append('file', fs.createReadStream(testFile));
-      formData.append('documentType', 'qualification');
+      // Use a valid documentType accepted by the API
+      formData.append('documentType', 'degree_certificate');
 
       const uploadRes = await axios.post(`${BASE_URL}/api/trainers/upload-document`, formData, {
         headers: {
           ...formData.getHeaders(),
           Authorization: `Bearer ${trainerToken}`,
         },
+        maxBodyLength: Infinity,
         timeout: API_TIMEOUT,
       });
 
@@ -187,7 +213,8 @@ async function main() {
     console.log('─'.repeat(70));
     try {
       console.log(`Assigning college: ${collegeName}`);
-      const collegeRes = await testApiCall('POST', '/api/trainers/assign-college', {
+      // The trainer-management routes are mounted under /api/trainer-management
+      const collegeRes = await testApiCall('POST', '/api/trainer-management/trainers/assign-college', {
         trainerId,
         collegeName,
         subject: 'Computer Science',

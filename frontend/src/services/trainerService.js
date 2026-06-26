@@ -111,7 +111,8 @@ export const getTrainerProfile = (query = "") =>
  * @param {FormData} formData - Contains file, trainerId, documentType
  */
 export const uploadDocument = (formData) =>
-  api.post("/trainer-documents/upload", formData, { skipAuth: true });
+  // uploads must be authenticated for trainer document routes
+  api.post("/trainer-documents/upload", formData);
 
 /**
  * Verify or reject a document

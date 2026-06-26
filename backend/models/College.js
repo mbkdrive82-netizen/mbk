@@ -87,7 +87,9 @@ const collegeSchema = new mongoose.Schema({
     companyId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Company',
-        required: true,
+        // Optional: company-scoped colleges set this, while standalone colleges
+        // created for trainer assignment (admin) have no company.
+        default: null,
     },
     companyCode: {
         type: String,
@@ -95,6 +97,38 @@ const collegeSchema = new mongoose.Schema({
         index: true,
         uppercase: true,
         trim: true,
+    },
+    // Fields used by the standalone/admin college flow (kept here so a single
+    // canonical College model serves both the company and trainer subsystems).
+    code: {
+        type: String,
+        default: null,
+        index: true,
+        trim: true,
+    },
+    state: {
+        type: String,
+        default: null,
+    },
+    country: {
+        type: String,
+        default: null,
+    },
+    trainingDays: {
+        type: Number,
+        default: 12,
+    },
+    totalTrainers: {
+        type: Number,
+        default: 0,
+    },
+    isActive: {
+        type: Boolean,
+        default: true,
+    },
+    adminNotes: {
+        type: String,
+        default: null,
     },
     courseId: {
         type: mongoose.Schema.Types.ObjectId,
@@ -165,6 +199,6 @@ collegeSchema.index({ companyId: 1, courseId: 1, name: 1 });
 collegeSchema.index({ companyCode: 1, name: 1 });
 collegeSchema.index({ driveFolderId: 1 }, { sparse: true });
 
-const College = mongoose.model('College', collegeSchema);
+const College = mongoose.models.College || mongoose.model('College', collegeSchema);
 
 module.exports = College;

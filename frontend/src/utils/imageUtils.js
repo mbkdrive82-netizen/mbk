@@ -2,6 +2,32 @@ import { API_BASE_URL } from '@/services/api';
 
 const cdnUrl = (process.env.NEXT_PUBLIC_CDN_URL || '').trim().replace(/\/+$/, '');
 
+/**
+ * Session-level cache of image URLs that have already failed to load (404, blocked,
+ * etc). Used to stop virtualized lists from re-requesting the same dead URL every
+ * time a row scrolls back into view, which otherwise floods the console with
+ * repeating "Failed to load resource" errors. Lives at module scope so it survives
+ * component remounts and parent state resets.
+ */
+export const failedImageUrls = new Set();
+
+// Safe accessor: `localStorage` is undefined during server-side rendering, so
+// reading it directly throws a ReferenceError and blanks the page.
+const getAccessToken = () => {
+    if (typeof window === 'undefined') return null;
+    try {
+        return window.localStorage.getItem('accessToken');
+    } catch {
+        return null;
+    }
+};
+
+export const markImageUrlFailed = (url) => {
+    if (url) failedImageUrls.add(url);
+};
+
+export const isImageUrlFailed = (url) => Boolean(url) && failedImageUrls.has(url);
+
 const extractGoogleDriveFileId = (value = '') => {
     if (typeof value !== 'string') return null;
 
@@ -119,7 +145,7 @@ export const getProfilePictureUrl = (path) => {
     const securePath = `/api/uploads/trainer-documents/${filename}`;
     
     // 5. Append Auth Token
-    const token = localStorage.getItem('accessToken');
+    const token = getAccessToken();
     const authQuery = token ? `?token=${token}` : '';
 
     return `${cdnUrl}${securePath}${authQuery}`;
@@ -183,16 +209,30 @@ export const getDocumentEmbedUrl = (documentOrPath) => {
     return toGoogleDriveEmbedUrl(documentOrPath) || getDocumentViewUrl(documentOrPath);
 };
 
+// Resolve a single stored value (Drive link, http URL, local path or bare
+// filename) into one or more usable <img> src candidates. Drive links expand to
+// the Google preview CDN variants; local paths/filenames are routed through the
+// secure backend endpoint (which serves the file or 302-redirects to its Drive
+// copy) instead of being left as a frontend-relative URL that always 404s.
+const resolveSourceCandidates = (value) => {
+    if (!value || typeof value !== 'string') return [];
+    if (extractGoogleDriveFileId(value)) {
+        return getGoogleDriveImagePreviewCandidates(value);
+    }
+    const resolved = getProfilePictureUrl(value);
+    return resolved ? [resolved] : [];
+};
+
 export const getDocumentImagePreviewCandidates = (documentOrPath) => {
     if (!documentOrPath) return [];
 
     const candidates =
         typeof documentOrPath === 'object'
             ? [
-                ...getGoogleDriveImagePreviewCandidates(documentOrPath.filePath),
-                ...getGoogleDriveImagePreviewCandidates(documentOrPath.driveViewLink),
-                ...getGoogleDriveImagePreviewCandidates(documentOrPath.driveDownloadLink),
-                ...getGoogleDriveImagePreviewCandidates(documentOrPath.url),
+                ...resolveSourceCandidates(documentOrPath.filePath),
+                ...resolveSourceCandidates(documentOrPath.driveViewLink),
+                ...resolveSourceCandidates(documentOrPath.driveDownloadLink),
+                ...resolveSourceCandidates(documentOrPath.url),
             ]
             : documentOrPath.startsWith('http')
                 ? getGoogleDriveImagePreviewCandidates(documentOrPath)
@@ -254,7 +294,7 @@ export const getSecureImageUrl = (path, uploadType = 'attendance') => {
             
             // Construct: /api/uploads/attendance/{subfolder}/{filename}
             const securePath = `/api/uploads/attendance/${subfolder}/${filename}`;
-            const token = localStorage.getItem('accessToken');
+            const token = getAccessToken();
             const authQuery = token ? `?token=${token}` : '';
             return `${cdnUrl}${securePath}${authQuery}`;
         }
@@ -271,7 +311,7 @@ export const getSecureImageUrl = (path, uploadType = 'attendance') => {
     const securePath = `/api/uploads/${uploadType}/${filename}`;
     
     // Append Auth Token
-    const token = localStorage.getItem('accessToken');
+    const token = getAccessToken();
     const authQuery = token ? `?token=${token}` : '';
 
     return `${cdnUrl}${securePath}${authQuery}`;

@@ -179,6 +179,7 @@ const attendanceSchema = new mongoose.Schema({
     // New Structured Geo-Location (MANDATORY)
     checkIn: {
         time: { type: Date, default: null },
+        driveFileId: { type: String, default: null },
         location: {
             lat: { type: Number, default: null },
             lng: { type: Number, default: null },
@@ -189,6 +190,7 @@ const attendanceSchema = new mongoose.Schema({
     },
     checkOut: {
         time: { type: Date, default: null },
+        driveFileId: { type: String, default: null },
         finalStatus: {
             type: String,
             enum: ['COMPLETED', 'PENDING'],

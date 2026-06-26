@@ -508,31 +508,48 @@ router.get('/courses', async (req, res) => {
     }
 });
 
-// GET /api/company-portal/trainers - Get trainers
+// GET /api/company-portal/trainers - Get trainers a company can schedule.
+// Returns ALL approved/verified trainers (not only ones already scheduled),
+// so a brand-new company can pick a trainer to create the first schedule.
 router.get('/trainers', async (req, res) => {
     try {
-        const companyId = req.user.companyId;
+        // "Schedulable" = admin-approved. Both approval paths set status=APPROVED;
+        // the .mjs admin path also sets registrationStatus=approved. We do NOT use
+        // verificationStatus alone (it can be set mid-registration before approval).
+        const trainerDocs = await Trainer.find({
+            $or: [
+                { status: 'APPROVED' },
+                { registrationStatus: 'approved' },
+            ],
+        })
+            .select('firstName lastName name email phone city specialization trainerId profilePicture userId')
+            .populate('userId', 'name email')
+            .sort({ firstName: 1, createdAt: -1 })
+            .limit(1000)
+            .lean();
 
-        if (!companyId) {
-            return res.status(400).json({
-                success: false,
-                message: 'Company ID not found for this user'
-            });
-        }
-
-        // Get all colleges for this company
-        const colleges = await College.find({ companyId }).select('_id');
-        const collegeIds = colleges.map(c => c._id);
-
-        // Get unique trainers who have taught at these colleges
-        const trainerIds = await Schedule.distinct('trainerId', {
-            collegeId: { $in: collegeIds },
-            trainerId: { $ne: null }
+        // Normalize a display name so the scheduling dropdown always shows it.
+        const trainers = trainerDocs.map((t) => {
+            const fullName =
+                t.name ||
+                [t.firstName, t.lastName].filter(Boolean).join(' ').trim() ||
+                t.userId?.name ||
+                t.email ||
+                'Trainer';
+            return {
+                _id: t._id,
+                id: t._id,
+                name: fullName,
+                firstName: t.firstName || '',
+                lastName: t.lastName || '',
+                email: t.email || t.userId?.email || '',
+                phone: t.phone || '',
+                city: t.city || '',
+                specialization: t.specialization || '',
+                trainerId: t.trainerId || '',
+                profilePicture: t.profilePicture || null,
+            };
         });
-
-        const trainers = await Trainer.find({
-            _id: { $in: trainerIds }
-        }).select('name email phone city specialization');
 
         res.json({
             success: true,

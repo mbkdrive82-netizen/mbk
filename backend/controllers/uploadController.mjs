@@ -5,6 +5,27 @@ import { uploadFileToGoogleDrive, verifyFolderStructure } from '../services/goog
 import path from 'path';
 import fs from 'fs';
 import { EventEmitter } from 'events';
+import { createRequire } from 'module';
+
+// Canonical Drive hierarchy (shared with documents + college assignment) so a
+// missing Day/Attendance/Geo Tag folder can be auto-created on upload instead
+// of failing the upload.
+const require = createRequire(import.meta.url);
+const { ensureTrainerCollegeHierarchy } = require('../modules/drive/driveTrainerDocuments.service.js');
+
+const mapHierarchyDayFolders = (dayFoldersByDayNumber = {}) =>
+  Object.keys(dayFoldersByDayNumber)
+    .map((dayString) => {
+      const meta = dayFoldersByDayNumber[dayString] || {};
+      return {
+        day: Number(dayString),
+        dayFolderId: meta.id || null,
+        attendance: meta.attendanceFolder?.id || null,
+        geo_tag: meta.geoTagFolder?.id || null,
+        excel_sheet: meta.excelSheetFolder?.id || null,
+      };
+    })
+    .sort((a, b) => a.day - b.day);
 
 // Create event emitter for real-time notifications
 export const uploadEventEmitter = new EventEmitter();
@@ -108,15 +129,58 @@ export const uploadDailyFile = async (req, res) => {
 // Background upload to Google Drive
 const uploadToGoogleDrive = async (uploadRecord, file, collegeAssignment) => {
   try {
-    const dayFolderPath = `day_${uploadRecord.day}`;
+    const dayFolderPath = `Day ${uploadRecord.day}`;
     const uploadTypeFolder = uploadRecord.uploadType;
+    const uploadTypeFolderDisplay = {
+      attendance: 'Attendance',
+      geo_tag: 'Geo Tag',
+      excel_sheet: 'Excel Sheet',
+    }[uploadTypeFolder] || uploadTypeFolder;
 
-    // Get target folder ID from college assignment
-    // For now, we'll use a placeholder - in production, store day folder IDs
-    const targetFolderId = collegeAssignment.googleDriveFolderId;
+    // Determine the correct target folder for this day and upload type
+    const dayFolder = (collegeAssignment.dayFolders || []).find(
+      (entry) => Number(entry.day) === Number(uploadRecord.day),
+    );
+
+    let targetFolderId = dayFolder ? dayFolder[uploadTypeFolder] : null;
+
+    // Auto-heal: if the day/subfolder mapping is missing (older assignment or a
+    // partially-created structure), (re)build it in Google Drive and persist the
+    // mapping back onto the trainer's college assignment, then continue.
+    if (!targetFolderId) {
+      const trainerDoc = await Trainer.findById(uploadRecord.trainerId);
+      if (trainerDoc) {
+        const hierarchy = await ensureTrainerCollegeHierarchy({
+          trainer: trainerDoc,
+          collegeName: uploadRecord.collegeName,
+          totalDays: 12,
+        });
+
+        const meta = (hierarchy.dayFoldersByDayNumber || {})[uploadRecord.day] || {};
+        targetFolderId =
+          {
+            attendance: meta.attendanceFolder?.id,
+            geo_tag: meta.geoTagFolder?.id,
+            excel_sheet: meta.excelSheetFolder?.id,
+          }[uploadTypeFolder] || null;
+
+        const assignment = (trainerDoc.colleges || []).find(
+          (c) => String(c.collegeId) === String(uploadRecord.collegeId),
+        );
+        if (assignment) {
+          assignment.dayFolders = mapHierarchyDayFolders(
+            hierarchy.dayFoldersByDayNumber,
+          );
+          if (hierarchy.collegeFolder?.id) {
+            assignment.googleDriveFolderId = hierarchy.collegeFolder.id;
+          }
+          await trainerDoc.save();
+        }
+      }
+    }
 
     if (!targetFolderId) {
-      throw new Error('Google Drive folder not configured for this college');
+      throw new Error(`Google Drive folder not configured for upload type '${uploadTypeFolder}' on day ${uploadRecord.day}`);
     }
 
     // Update status to uploading
@@ -134,7 +198,7 @@ const uploadToGoogleDrive = async (uploadRecord, file, collegeAssignment) => {
     // Update upload record with success
     uploadRecord.uploadStatus = 'success';
     uploadRecord.driveFileId = uploadResult.driveFileId;
-    uploadRecord.driveFolderPath = `NM Trainers/${uploadRecord.trainerName}/${uploadRecord.collegeName}/${dayFolderPath}/${uploadTypeFolder}`;
+    uploadRecord.driveFolderPath = `NM Trainers/${uploadRecord.trainerName}/${uploadRecord.collegeName}/${dayFolderPath}/${uploadTypeFolderDisplay}`;
     uploadRecord.uploadedAt = new Date();
     await uploadRecord.save();
 

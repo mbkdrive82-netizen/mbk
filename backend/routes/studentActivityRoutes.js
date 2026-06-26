@@ -26,6 +26,62 @@ const { uploadAttendance } = require('../config/upload');
 const uploadMiddle = uploadAttendance;
 const uploadSingleImage = multer({ storage }).single('image');
 
+// Helper to upload files to trainer's specific day-folder on Google Drive
+async function uploadTrainerFileToDrive({ trainer, collegeId, dayNumber, file, isExcel }) {
+  try {
+    const { isTrainingDriveEnabled, uploadToDriveWithRetry } = require("../modules/drive/driveGateway");
+    if (!isTrainingDriveEnabled()) return null;
+
+    // Fetch the freshest trainer document to ensure dayFolders are present
+    const { Trainer } = require("../models");
+    const freshTrainer = await Trainer.findById(trainer._id);
+    if (!freshTrainer) {
+      console.warn(`[DRIVE-UPLOAD] Trainer ${trainer._id} not found in DB`);
+      return null;
+    }
+
+    const collegeEntry = freshTrainer.colleges?.find(c => String(c.collegeId) === String(collegeId));
+    let targetFolderId = null;
+
+    if (collegeEntry && collegeEntry.dayFolders) {
+      const dayFolder = collegeEntry.dayFolders.find(df => df.day === dayNumber);
+      if (dayFolder) {
+        targetFolderId = isExcel ? dayFolder.attendance : dayFolder.geo_tag;
+      }
+    }
+
+    if (!targetFolderId) {
+      targetFolderId = freshTrainer.collegeDriveFolderId || freshTrainer.driveFolderId;
+    }
+
+    if (!targetFolderId) {
+      console.warn(`[DRIVE-UPLOAD] Target folder not found for trainer ${freshTrainer._id}`);
+      return null;
+    }
+
+    const fileBuffer = await fs.promises.readFile(file.path);
+    const mimeType = file.mimetype;
+    const originalName = file.originalname || path.basename(file.path);
+
+    const driveUpload = await uploadToDriveWithRetry(
+      {
+        fileBuffer,
+        mimeType,
+        originalName,
+        folderId: targetFolderId,
+        fileName: originalName
+      },
+      { attempts: 3, initialDelayMs: 500 }
+    );
+
+    console.log(`[DRIVE-UPLOAD] File ${originalName} uploaded to Drive folder ${targetFolderId}`);
+    return driveUpload;
+  } catch (error) {
+    console.error("[DRIVE-UPLOAD] Error uploading file:", error.message);
+    return null;
+  }
+}
+
 // Fetch student activities & attendance submissions
 router.get('/', authenticate, async (req, res) => {
   try {
@@ -190,7 +246,176 @@ router.post('/attendance/submit', authenticate, uploadMiddle, async (req, res) =
       attendancePayload.finalStatus = 'COMPLETED';
     }
 
-    const attendanceRecord = await Attendance.create(attendancePayload);
+    // Find if there is an existing attendance record for today to merge/update
+    const targetDate = new Date(attendanceDate || Date.now());
+    const todayStart = new Date(targetDate);
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(targetDate);
+    todayEnd.setHours(23, 59, 59, 999);
+
+    let attendanceRecord = await Attendance.findOne({
+      trainerId,
+      date: { $gte: todayStart, $lte: todayEnd }
+    });
+
+    if (attendanceRecord) {
+      if (attendanceExcelUrl) attendanceRecord.attendanceExcelUrl = attendanceExcelUrl;
+      if (studentsPhotoUrl) attendanceRecord.studentsPhotoUrl = studentsPhotoUrl;
+      if (attendancePdfUrl) {
+        attendanceRecord.attendancePdfUrl = attendancePdfUrl;
+        attendanceRecord.scannedAttendancePdfUrl = attendancePdfUrl;
+      }
+      if (normalizedStatus) attendanceRecord.status = normalizedStatus;
+      if (checkInTime) attendanceRecord.checkInTime = checkInTime;
+      if (checkOutTime) attendanceRecord.checkOutTime = checkOutTime;
+
+      if (checkInImageUrl) {
+        attendanceRecord.imageUrl = checkInImageUrl;
+        attendanceRecord.studentsPhotoUrl = attendanceRecord.studentsPhotoUrl || checkInImageUrl;
+        attendanceRecord.checkIn = {
+          time: attendanceRecord.checkIn?.time || new Date(),
+          location: {
+            lat: latitude,
+            lng: longitude,
+            accuracy,
+            address: attendanceRecord.checkIn?.location?.address || null,
+          }
+        };
+      }
+
+      if (checkOutImageUrl) {
+        attendanceRecord.checkOut = {
+          time: new Date(),
+          finalStatus: 'COMPLETED',
+          location: {
+            lat: latitude,
+            lng: longitude,
+            accuracy,
+            address: attendanceRecord.checkOut?.location?.address || null,
+          }
+        };
+        attendanceRecord.checkOutGeoImageUrl = checkOutImageUrl;
+        attendanceRecord.checkOutGeoImageUrls = [checkOutImageUrl];
+        attendanceRecord.finalStatus = 'COMPLETED';
+        attendanceRecord.completedAt = new Date();
+      }
+      await attendanceRecord.save();
+    } else {
+      attendanceRecord = await Attendance.create(attendancePayload);
+    }
+
+    // Asynchronously upload all files to Google Drive in the background
+    try {
+      const { Trainer, Schedule } = require('../models');
+      const { getActiveAssignment } = require("../utils/trainerAssignmentResolver");
+      const trainerDoc = await Trainer.findById(trainerId);
+      const activeAssign = trainerDoc ? await getActiveAssignment(trainerDoc) : null;
+      const resolvedCollegeId = attendanceRecord.collegeId || activeAssign?.college?._id;
+
+      // Dynamically resolve dayNumber from schedule
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
+      const schedule = trainerDoc ? await Schedule.findOne({
+        trainerId: trainerDoc._id,
+        scheduledDate: { $gte: todayStart, $lte: todayEnd },
+        isActive: { $ne: false }
+      }) : null;
+      const dayNumber = schedule?.dayNumber || attendanceRecord.dayNumber || 1;
+
+      // Keep Attendance DB record in sync with dayNumber & collegeId if missing
+      if (!attendanceRecord.dayNumber || !attendanceRecord.collegeId) {
+        await Attendance.findByIdAndUpdate(attendanceRecord._id, {
+          $set: {
+            dayNumber: dayNumber,
+            collegeId: resolvedCollegeId
+          }
+        });
+      }
+
+      if (trainerDoc && resolvedCollegeId) {
+        if (excelFile) {
+          uploadTrainerFileToDrive({
+            trainer: trainerDoc,
+            collegeId: resolvedCollegeId,
+            dayNumber,
+            file: excelFile,
+            isExcel: true
+          }).then(driveFile => {
+            const fileId = driveFile?.fileId || driveFile?.driveFileId || driveFile?.id;
+            if (fileId) {
+              Attendance.findByIdAndUpdate(attendanceRecord._id, {
+                $set: { "driveAssets.excelDriveFileId": fileId, driveSyncStatus: "SYNCED" }
+              }).catch(err => console.error("Error updating excel drive ID:", err));
+            }
+          }).catch(err => console.error("Drive upload failed for excel:", err));
+        }
+
+        if (pdfFile) {
+          uploadTrainerFileToDrive({
+            trainer: trainerDoc,
+            collegeId: resolvedCollegeId,
+            dayNumber,
+            file: pdfFile,
+            isExcel: true
+          }).then(driveFile => {
+            const fileId = driveFile?.fileId || driveFile?.driveFileId || driveFile?.id;
+            if (fileId) {
+              Attendance.findByIdAndUpdate(attendanceRecord._id, {
+                $set: { "attendancePdfDriveFileId": fileId }
+              }).catch(err => console.error("Error updating pdf drive ID:", err));
+            }
+          }).catch(err => console.error("Drive upload failed for pdf:", err));
+        }
+
+        if (photoFile) {
+          uploadTrainerFileToDrive({
+            trainer: trainerDoc,
+            collegeId: resolvedCollegeId,
+            dayNumber,
+            file: photoFile,
+            isExcel: false
+          }).catch(err => console.error("Drive upload failed for photo:", err));
+        }
+
+        if (checkInFile) {
+          uploadTrainerFileToDrive({
+            trainer: trainerDoc,
+            collegeId: resolvedCollegeId,
+            dayNumber,
+            file: checkInFile,
+            isExcel: false
+          }).then(driveFile => {
+            const fileId = driveFile?.fileId || driveFile?.driveFileId || driveFile?.id;
+            if (fileId) {
+              Attendance.findByIdAndUpdate(attendanceRecord._id, {
+                $set: { "checkIn.driveFileId": fileId }
+              }).catch(err => console.error("Error updating checkIn drive ID:", err));
+            }
+          }).catch(err => console.error("Drive upload failed for checkIn:", err));
+        }
+
+        if (checkOutFile) {
+          uploadTrainerFileToDrive({
+            trainer: trainerDoc,
+            collegeId: resolvedCollegeId,
+            dayNumber,
+            file: checkOutFile,
+            isExcel: false
+          }).then(driveFile => {
+            const fileId = driveFile?.fileId || driveFile?.driveFileId || driveFile?.id;
+            if (fileId) {
+              Attendance.findByIdAndUpdate(attendanceRecord._id, {
+                $set: { "checkOut.driveFileId": fileId }
+              }).catch(err => console.error("Error updating checkOut drive ID:", err));
+            }
+          }).catch(err => console.error("Drive upload failed for checkOut:", err));
+        }
+      }
+    } catch (driveSyncErr) {
+      console.error("[DRIVE-SYNC-TRIGGER] Failed to initiate async uploads:", driveSyncErr.message);
+    }
 
     return res.json({ success: true, attendanceId: attendanceRecord._id });
   } catch (err) {

@@ -1286,8 +1286,11 @@ const sendRegistrationOTP = async (userEmail, userName, otp) => {
     return { success: true, messageId: info.messageId };
   } catch (error) {
     console.error("Error sending registration OTP email via SMTP:", error.message);
+    if (process.env.NODE_ENV === "production") {
+      return { success: false, error: error.message || String(error) };
+    }
     console.log("Proceeding with flow using locally logged OTP...");
-    return { success: true, messageId: "mock-id-local-testing" };
+    return { success: false, error: error.message || String(error) };
   }
 };
 
@@ -1429,6 +1432,44 @@ const sendTrainerApprovalEmail = async (
   }
 };
 
+const sendTrainerCollegeAssignmentEmail = async (
+  trainerEmail,
+  trainerName,
+  collegeName,
+  collegeLink = null,
+) => {
+  const frontendUrl = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/+$/, '');
+  const loginUrl = `${frontendUrl}/login`;
+  const mailOptions = {
+    from: process.env.EMAIL_FROM || `"MBK BY TSMG" <${smtpUser}>`,
+    to: trainerEmail,
+    subject: `College Assigned: ${collegeName}`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background: #f8fafc; color: #111827;">
+        <h2 style="margin-bottom: 8px; color: #0f172a;">College Assigned Successfully</h2>
+        <p style="margin: 0 0 16px; line-height: 1.6;">Hello ${trainerName},</p>
+        <p style="margin: 0 0 16px; line-height: 1.6;">You have been assigned to <strong>${collegeName}</strong>. A dedicated college folder has been created under your trainer folder in Google Drive.</p>
+        ${collegeLink ? `
+          <p style="margin: 0 0 16px; line-height: 1.6;">
+            <a href="${collegeLink}" style="color: #2563eb; text-decoration: none;">Open Assigned College Folder</a>
+          </p>
+        ` : ''}
+        <p style="margin: 0 0 16px; line-height: 1.6;">You can now upload attendance and geo-tag files under the assigned college folder.</p>
+        <p style="margin: 0 0 16px; line-height: 1.6;">Login to your trainer portal here:</p>
+        <p style="margin: 0 0 24px;"><a href="${loginUrl}" style="background: #2563eb; color: #ffffff; padding: 12px 18px; border-radius: 8px; display: inline-block;">Login to Portal</a></p>
+        <p style="margin: 0; color: #475569; font-size: 13px; line-height: 1.6;">If you have questions, please contact your admin.</p>
+      </div>
+    `,
+  };
+
+  try {
+    return await transporter.sendMail(mailOptions);
+  } catch (error) {
+    console.error('Error sending trainer college assignment email:', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
 const sendTrainerLogin = async (trainer) => {
   const trainerName = trainer.firstName
     ? `${trainer.firstName} ${trainer.lastName}`
@@ -1530,6 +1571,7 @@ module.exports = {
   sendAdminSubmissionNotificationEmail,
   sendRegistrationOTP,
   sendTrainerApprovalEmail,
+  sendTrainerCollegeAssignmentEmail,
   sendMail,
   sendOtpEmail,
   sendTrainerLogin,

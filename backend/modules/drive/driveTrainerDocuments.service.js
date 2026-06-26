@@ -1,19 +1,18 @@
 const { TrainerDocument } = require("../../models");
 const {
-  DEFAULT_TRAINER_DOCUMENTS_FOLDER_ID,
+  getDefaultTrainerDocumentsFolderId,
   ensureDriveFolder,
   findDriveFolder,
   moveDriveItemToParent,
   syncDriveFolder,
 } = require("../../services/googleDriveService");
 
-const TRAINER_REGISTRATION_FOLDER_NAME = String(
-  process.env.GOOGLE_DRIVE_TRAINER_REGISTRATION_FOLDER_NAME ||
-    "REGISTER DOCUMENT",
+const TRAINER_DOCUMENTS_SUBFOLDER_NAME = String(
+  process.env.GOOGLE_DRIVE_TRAINER_DOCUMENTS_SUBFOLDER_NAME || "documents",
 ).trim();
 
-const TRAINER_DOCUMENTS_SUBFOLDER_NAME = String(
-  process.env.GOOGLE_DRIVE_TRAINER_DOCUMENTS_SUBFOLDER_NAME || "",
+const TRAINER_REGISTRATION_FOLDER_NAME = String(
+  process.env.GOOGLE_DRIVE_TRAINER_REGISTRATION_FOLDER_NAME || "",
 ).trim();
 
 const normalizeName = (value = "") => String(value || "").trim().toLowerCase();
@@ -99,24 +98,34 @@ const ensureTrainerDocumentHierarchy = async ({
   persistTrainer = true,
   syncExistingDocuments = false,
 } = {}) => {
-  if (!DEFAULT_TRAINER_DOCUMENTS_FOLDER_ID) {
+  const rootFolderId = getDefaultTrainerDocumentsFolderId();
+  if (!rootFolderId) {
     throw new Error("Google Drive folder ID is required.");
   }
 
   const trainerCode = await ensureTrainerCode(trainer);
   const trainerName = [trainer.firstName, trainer.lastName].filter(Boolean).join(" ").trim() || trainer.name || trainer.email?.split("@")[0] || trainerCode;
 
-  const registrationFolder = await ensureDriveFolder({
-    parentFolderId: DEFAULT_TRAINER_DOCUMENTS_FOLDER_ID,
-    folderName: TRAINER_REGISTRATION_FOLDER_NAME,
-  });
+  const parentFolderId = TRAINER_REGISTRATION_FOLDER_NAME
+    ? (await ensureDriveFolder({
+        parentFolderId: rootFolderId,
+        folderName: TRAINER_REGISTRATION_FOLDER_NAME,
+      })).id
+    : rootFolderId;
+
+  const registrationFolder = TRAINER_REGISTRATION_FOLDER_NAME
+    ? await findDriveFolder({
+        folderName: TRAINER_REGISTRATION_FOLDER_NAME,
+        parentFolderId: rootFolderId,
+      })
+    : { id: rootFolderId, name: null, webViewLink: null };
 
   const legacyTrainersFolderName = String(
     process.env.GOOGLE_DRIVE_TRAINERS_FOLDER_NAME || "Trainers",
   ).trim();
   const legacyTrainersFolder = await findDriveFolder({
     folderName: legacyTrainersFolderName,
-    parentFolderId: DEFAULT_TRAINER_DOCUMENTS_FOLDER_ID,
+    parentFolderId: rootFolderId,
   });
 
   let existingTrainerFolderId = null;
@@ -126,7 +135,7 @@ const ensureTrainerDocumentHierarchy = async ({
     existingDocumentsFolderId = trainer.driveFolderId || null;
     const existingTrainerFolder = await findDriveFolder({
       folderName: trainerName,
-      parentFolderId: registrationFolder.id,
+      parentFolderId,
     });
     existingTrainerFolderId = existingTrainerFolder?.id || null;
 
@@ -140,7 +149,7 @@ const ensureTrainerDocumentHierarchy = async ({
   } else {
     const existingTrainerFolder = await findDriveFolder({
       folderName: trainerName,
-      parentFolderId: registrationFolder.id,
+      parentFolderId,
     });
     existingTrainerFolderId = existingTrainerFolder?.id || null;
 
@@ -162,7 +171,7 @@ const ensureTrainerDocumentHierarchy = async ({
   const trainerFolder = await syncDriveFolder({
     folderId: existingTrainerFolderId,
     folderName: trainerName,
-    parentFolderId: registrationFolder.id,
+    parentFolderId,
   });
 
   const documentsFolder = TRAINER_DOCUMENTS_SUBFOLDER_NAME
@@ -194,7 +203,7 @@ const ensureTrainerDocumentHierarchy = async ({
 
   return {
     rootFolder: {
-      id: DEFAULT_TRAINER_DOCUMENTS_FOLDER_ID,
+      id: rootFolderId,
       name: null,
       link: null,
     },
@@ -209,7 +218,8 @@ const ensureTrainerCollegeHierarchy = async ({
   collegeName,
   totalDays = 12,
 } = {}) => {
-  if (!DEFAULT_TRAINER_DOCUMENTS_FOLDER_ID) {
+  const rootFolderId = getDefaultTrainerDocumentsFolderId();
+  if (!rootFolderId) {
     throw new Error("Google Drive folder ID is required.");
   }
 
@@ -234,36 +244,33 @@ const ensureTrainerCollegeHierarchy = async ({
     parentFolderId: trainerFolder.id,
   });
 
-  // Create day_1 to day_N folders, each with attendance, geo_tag, and excel_sheet subfolders
+  // Create Day 1 to Day N folders, each with Attendance, Geo Tag, and Excel Sheet subfolders
   const dayFoldersByDayNumber = {};
   const safeDays = Math.max(1, Number(totalDays) || 12);
 
   for (let dayNumber = 1; dayNumber <= safeDays; dayNumber += 1) {
     const dayFolder = await ensureDriveFolder({
-      folderName: `day_${dayNumber}`,
+      folderName: `Day ${dayNumber}`,
       parentFolderId: collegeFolder.id,
     });
 
     const attendanceFolder = await ensureDriveFolder({
-      folderName: "attendance",
+      folderName: "Attendance",
       parentFolderId: dayFolder.id,
     });
 
     const geoTagFolder = await ensureDriveFolder({
-      folderName: "geo_tag",
+      folderName: "Geo Tag",
       parentFolderId: dayFolder.id,
     });
 
-    const excelSheetFolder = await ensureDriveFolder({
-      folderName: "excel_sheet",
-      parentFolderId: dayFolder.id,
-    });
-
+    // Per requirement, each Day folder contains ONLY "Attendance" and "Geo Tag".
+    // No "Excel Sheet" subfolder is created.
     dayFoldersByDayNumber[dayNumber] = {
       ...toFolderPayload(dayFolder),
       attendanceFolder: toFolderPayload(attendanceFolder),
       geoTagFolder: toFolderPayload(geoTagFolder),
-      excelSheetFolder: toFolderPayload(excelSheetFolder),
+      excelSheetFolder: null,
     };
   }
 

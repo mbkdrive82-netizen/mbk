@@ -3,7 +3,7 @@ export const INDIAN_PHONE_REGEX = /^[6-9]\d{9}$/;
 export const FULL_NAME_REGEX = /^[a-zA-Z][a-zA-Z\s.'-]{1,99}$/;
 export const WEBSITE_REGEX = /^(https?:\/\/)?([\da-z.-]+)\.([a-z.]{2,6})([/\w .-]*)*\/?$/i;
 export const PASSWORD_MIN_LENGTH = 8;
-export const PASSWORD_MIN_LENGTH_MESSAGE = `Password must be at least ${PASSWORD_MIN_LENGTH} characters.`;
+export const PASSWORD_MIN_LENGTH_MESSAGE = `Password must be ${PASSWORD_MIN_LENGTH}+ characters with uppercase, lowercase, digit, and special character.`;
 
 export const sanitizePhoneInput = (value) =>
   String(value || '').replace(/\D/g, '').slice(0, 10);
@@ -14,8 +14,10 @@ export const isValidEmail = (email) =>
 export const isValidIndianPhone = (phone) =>
   INDIAN_PHONE_REGEX.test(sanitizePhoneInput(phone));
 
+// Require at least one lowercase, one uppercase, one digit and one special char
+const PASSWORD_COMPLEXITY_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
 export const isValidPassword = (password) =>
-  String(password || '').length >= PASSWORD_MIN_LENGTH;
+  PASSWORD_COMPLEXITY_REGEX.test(String(password || ''));
 
 export const isValidFullName = (name) => {
   const trimmed = String(name || '').trim();

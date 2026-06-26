@@ -5,6 +5,7 @@ const router = express.Router();
 
 // Load CommonJS modules using require
 import authRoutes from "./authRoutes.mjs";
+import trainerManagementRoutes from "./trainerManagementRoutes.mjs";
 const trainerRoutes = require("./trainerRoutes.js");
 const collegeRoutes = require("./collegeRoutes.js");
 const attendanceRoutes = require("./attendanceRoutes.js");
@@ -73,6 +74,7 @@ router.use("/courses", courseRoutes);
 router.use("/batches", batchRoutes);
 
 router.use("/trainers", trainerRoutes);
+router.use("/trainer-management", trainerManagementRoutes);
 router.use("/schedules", scheduleRoutes);
 router.post(
   "/upload-image",

@@ -51,8 +51,11 @@ export default function StudentAttendancePage() {
           2: "GPS position unavailable. Make sure GPS/Wi-Fi is enabled.",
           3: "Location request timed out. Please try again.",
         };
-        setLocationStatus("error");
+        // Fallback to (0,0) so the process doesn't block the trainer
+        setLocation({ lat: 0, lng: 0, accuracy: 0 });
+        setLocationStatus("ready");
         setLocationError(messages[err.code] || "Failed to acquire location coordinates.");
+        console.warn("Location acquisition failed, using fallback coordinates (0, 0)");
       },
       { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
     );

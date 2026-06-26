@@ -7,8 +7,25 @@ import notify from '@/lib/toast';
  * Should be called once at app initialization
  */
 export const setupGlobalErrorHandlers = () => {
+  // Aborted/cancelled requests are an expected part of normal operation
+  // (React Query cancels in-flight queries on unmount/refetch, the dev-mode
+  // StrictMode double-mount, route changes, request timeouts). They are NOT
+  // real failures and must not be logged or surfaced to the user.
+  const isAbortError = (reason) => {
+    if (!reason) return false;
+    const name = reason.name || reason.code;
+    if (name === 'AbortError' || name === 'ABORT_ERR') return true;
+    const message = String(reason.message || reason).toLowerCase();
+    return message.includes('aborted') || message.includes('cancel');
+  };
+
   // Handle unhandled promise rejections
   window.addEventListener('unhandledrejection', (event) => {
+    if (isAbortError(event.reason)) {
+      event.preventDefault();
+      return;
+    }
+
     console.error('❌ Unhandled Promise Rejection:', event.reason);
 
     const errorMessage =
@@ -60,7 +77,10 @@ export const setupGlobalErrorHandlers = () => {
 
       return response;
     } catch (error) {
-      console.error('❌ Network error:', error.message);
+      // Don't log expected aborts/cancellations (unmount, refetch, timeout).
+      if (!isAbortError(error)) {
+        console.error('❌ Network error:', error.message);
+      }
       throw error;
     }
   };

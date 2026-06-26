@@ -42,13 +42,19 @@ const LoginModal = ({ isOpen, onClose }) => {
   const [accountType, setAccountType] = useState("trainer");
 
   const navigateAfterLogin = async (route, role, email) => {
-    prefetchPortalRoutes(router, role, email);
-    try {
-      await warmPortalDataBundle();
-    } catch (error) {
-      console.warn("Portal data warmup failed before navigation:", error);
-    }
+    // Navigate immediately so the user lands on their dashboard without waiting
+    // for portal data warmup. Warming runs in the background (non-blocking) to
+    // avoid the perceived "stuck on home, then dashboard" delay after login.
     safeRouterReplace(router, route);
+
+    if (typeof window !== "undefined") {
+      Promise.resolve()
+        .then(() => prefetchPortalRoutes(router, role, email))
+        .then(() => warmPortalDataBundle())
+        .catch((error) =>
+          console.warn("Portal data warmup failed (non-blocking):", error),
+        );
+    }
   };
 
   // Login State
@@ -152,13 +158,12 @@ const LoginModal = ({ isOpen, onClose }) => {
         expectedRole: accountType,
         preferAdminFirst: accountType === "company",
       });
+      const dashboardRoute = getDashboardRouteByRole(userData.role, userData.email);
+      
+      // Use successAndNavigate which handles both notification and navigation
       await notify.successAndNavigate("Login successful", async () => {
         onClose();
-        await navigateAfterLogin(
-          getDashboardRouteByRole(userData.role, userData.email),
-          userData.role,
-          userData.email,
-        );
+        await navigateAfterLogin(dashboardRoute, userData.role, userData.email);
       });
     } catch (err) {
       const isExpectedAuthState =

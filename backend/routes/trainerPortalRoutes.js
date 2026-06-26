@@ -10,79 +10,10 @@ const {
   StudentActivity,
   TrainerAssignment,
 } = require("../models");
+const { getActiveAssignment } = require("../utils/trainerAssignmentResolver");
 
 const escapeRegex = (value = "") =>
   String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-async function getActiveAssignment(trainer, reqUser) {
-  const trainerName = trainer.firstName && trainer.lastName
-    ? `${trainer.firstName} ${trainer.lastName}`
-    : (trainer.userId?.name || trainer.email || reqUser.name || "");
-
-  if (!trainerName) return null;
-
-  const assignmentQuery = { active: true };
-  if (trainer._id) {
-    assignmentQuery.$or = [
-      { trainerid: String(trainer._id) },
-      { trainerName: { $regex: new RegExp(`^${escapeRegex(trainerName)}$`, "i") } }
-    ];
-  } else {
-    assignmentQuery.trainerName = { $regex: new RegExp(`^${escapeRegex(trainerName)}$`, "i") };
-  }
-
-  let assignment = await TrainerAssignment.findOne(assignmentQuery);
-
-  if (!assignment) {
-    let college = null;
-    if (trainer.collegeId) {
-      college = await College.findById(trainer.collegeId);
-    } else {
-      college = await College.findOne({ trainers: trainer._id });
-    }
-
-    if (college) {
-      assignment = await TrainerAssignment.create({
-        trainerName,
-        trainerid: String(trainer._id),
-        trainername: trainerName,
-        collegeName: college.name,
-        collegename: college.name,
-        active: true,
-      });
-    }
-  }
-
-  if (!assignment) {
-    const fallbackCollege = await College.findOne({});
-    if (fallbackCollege) {
-      const clonedCollege = fallbackCollege.toObject();
-      clonedCollege.geofenceRadius = 9999999;
-      clonedCollege.name = `${fallbackCollege.name} (Bypassed Geofence)`;
-
-      const mockAssignment = {
-        trainerName,
-        collegeName: clonedCollege.name,
-        active: true,
-      };
-
-      return {
-        assignment: mockAssignment,
-        college: clonedCollege,
-      };
-    }
-    return null;
-  }
-
-  const college = await College.findOne({
-    name: { $regex: new RegExp(`^${escapeRegex(assignment.collegeName)}$`, "i") },
-  });
-
-  return {
-    assignment,
-    college,
-  };
-}
 
 const getDateRangeForPeriod = (period = "", dateValue) => {
   const today = new Date();

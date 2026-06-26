@@ -18,6 +18,11 @@ const TOAST_STYLES = {
     color: '#ffffff',
     border: '1px solid #c2410c',
   },
+  info: {
+    background: '#2563eb',
+    color: '#ffffff',
+    border: '1px solid #1e40af',
+  },
 };
 
 export const notify = {
@@ -37,15 +42,26 @@ export const notify = {
       style: TOAST_STYLES.warning,
       ...options,
     }),
+  info: (message, options = {}) =>
+    toast(message, {
+      style: TOAST_STYLES.info,
+      ...options,
+    }),
   loading: (message = DEFAULT_LOADING_LABEL, options = {}) =>
     toast.loading(message, options),
   dismiss: (id) => toast.dismiss(id),
   promise: (promise, messages, options = {}) =>
     toast.promise(promise, messages, options),
-  /** Show a success toast, wait briefly so it is visible, then run navigation. */
-  successAndNavigate: async (message, navigateFn, delayMs = 900) => {
+  /**
+   * Navigate immediately and show a success toast in parallel.
+   * Navigation is not blocked by the toast, so the dashboard loads instantly
+   * after login while the confirmation toast stays visible during the transition.
+   */
+  successAndNavigate: async (message, navigateFn, delayMs = 0) => {
     toast.success(message, { style: TOAST_STYLES.success });
-    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
     if (typeof navigateFn === 'function') {
       await navigateFn();
     }

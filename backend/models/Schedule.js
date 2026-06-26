@@ -78,6 +78,14 @@ const scheduleSchema = new mongoose.Schema({
         type: String,
         default: null,
     },
+    venue: {
+        type: String,
+        default: null,
+    },
+    remarks: {
+        type: String,
+        default: null,
+    },
     status: {
         type: String,
         enum: ['scheduled', 'inprogress', 'completed', 'cancelled', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'],

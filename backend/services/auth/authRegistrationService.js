@@ -24,6 +24,7 @@ const {
   assertUniqueEmail,
   assertUniquePhone,
   validateUniqueness,
+  checkEmailExists,
 } = require("./globalUniquenessService");
 
 const PASSWORD_MIN_LENGTH = 6;
@@ -157,7 +158,32 @@ const initTrainerRegistration = async ({
   buildTrainerRegistrationState,
 }) => {
   // Validate email uniqueness across all collections
-  const normalizedEmail = await assertUniqueEmail(email);
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) {
+    const err = new Error("Email is required");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const emailCheck = await checkEmailExists(normalizedEmail, null, "Trainer");
+  if (emailCheck.isValid === false) {
+    const err = new Error(emailCheck.message);
+    err.statusCode = 400;
+    throw err;
+  }
+  if (emailCheck.exists) {
+    const existingUser = await User.findOne({ email: normalizedEmail });
+    const normalizedRole = String(existingUser?.role || "").toLowerCase();
+    const isTrainerUser =
+      existingUser &&
+      (normalizedRole === "trainer" || normalizedRole.includes("trainer"));
+
+    if (!isTrainerUser) {
+      const err = new Error(emailCheck.message);
+      err.statusCode = 409;
+      throw err;
+    }
+  }
 
   let user = await User.findOne({ email: normalizedEmail });
   let trainer = await Trainer.findOne({ email: normalizedEmail });
@@ -234,6 +260,18 @@ const initTrainerRegistration = async ({
     },
     { upsert: true, new: true, setDefaultsOnInsert: true },
   );
+
+  // Auto-create Google Drive folder structure for the trainer
+  try {
+    const { ensureTrainerFolderStructure } = await import("../trainerGoogleDriveAutoSaveService.mjs");
+    await ensureTrainerFolderStructure(
+      trainer._id,
+      `${trainer.firstName || "Trainer"}_${trainer.lastName || trainer.email.split("@")[0]}`
+    );
+  } catch (driveError) {
+    console.warn("[AUTO-SAVE] Failed to create Google Drive folders for trainer:", driveError.message);
+    // Don't fail registration if Drive fails
+  }
 
   const otpResult = await sendEmailOtp({
     email: normalizedEmail,

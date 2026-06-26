@@ -1,5 +1,5 @@
 const {
-  DEFAULT_TRAINER_DOCUMENTS_FOLDER_ID,
+  getDefaultTrainerDocumentsFolderId,
   ensureDriveFolder,
   findDriveFolder,
   moveDriveItemToParent,
@@ -16,7 +16,7 @@ const EXPLICIT_TRAINING_ROOT_FOLDER_ID = String(
 
 const TRAINING_PARENT_FOLDER_ID = String(
   process.env.GOOGLE_DRIVE_TRAINING_PARENT_FOLDER_ID ||
-    DEFAULT_TRAINER_DOCUMENTS_FOLDER_ID ||
+    getDefaultTrainerDocumentsFolderId() ||
     "",
 ).trim();
 
@@ -68,12 +68,9 @@ const toDepartmentDayFolders = (dayFoldersByDayNumber = {}) =>
         geoTagFolderId: folderMeta?.geoTagFolder?.id || null,
         geoTagFolderName: folderMeta?.geoTagFolder?.name || null,
         geoTagFolderLink: folderMeta?.geoTagFolder?.link || null,
-        pptFolderId: folderMeta?.pptFolder?.id || null,
-        pptFolderName: folderMeta?.pptFolder?.name || null,
-        pptFolderLink: folderMeta?.pptFolder?.link || null,
-        videosFolderId: folderMeta?.videosFolder?.id || null,
-        videosFolderName: folderMeta?.videosFolder?.name || null,
-        videosFolderLink: folderMeta?.videosFolder?.link || null,
+        excelSheetFolderId: folderMeta?.excelSheetFolder?.id || null,
+        excelSheetFolderName: folderMeta?.excelSheetFolder?.name || null,
+        excelSheetFolderLink: folderMeta?.excelSheetFolder?.link || null,
       };
     })
     .filter(Boolean)
@@ -85,7 +82,7 @@ const ensureDayFolderWithSubFolders = async ({ parentFolderId, dayNumber }) => {
     parentFolderId,
   });
 
-  // Create all required subfolders: attendance, geo_tag, ppt, videos
+  // Create all required subfolders: attendance, geo_tag, excel_sheet
   const attendanceFolder = await ensureDriveFolder({
     folderName: "attendance",
     parentFolderId: dayFolder.id,
@@ -96,13 +93,8 @@ const ensureDayFolderWithSubFolders = async ({ parentFolderId, dayNumber }) => {
     parentFolderId: dayFolder.id,
   });
 
-  const pptFolder = await ensureDriveFolder({
-    folderName: "ppt",
-    parentFolderId: dayFolder.id,
-  });
-
-  const videosFolder = await ensureDriveFolder({
-    folderName: "videos",
+  const excelSheetFolder = await ensureDriveFolder({
+    folderName: "excel_sheet",
     parentFolderId: dayFolder.id,
   });
 
@@ -110,8 +102,7 @@ const ensureDayFolderWithSubFolders = async ({ parentFolderId, dayNumber }) => {
     ...toFolderPayload(dayFolder),
     attendanceFolder: toFolderPayload(attendanceFolder),
     geoTagFolder: toFolderPayload(geoTagFolder),
-    pptFolder: toFolderPayload(pptFolder),
-    videosFolder: toFolderPayload(videosFolder),
+    excelSheetFolder: toFolderPayload(excelSheetFolder),
   };
 };
 

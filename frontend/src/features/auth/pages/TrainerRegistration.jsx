@@ -46,7 +46,7 @@ import {
 import SelfieCapture from "@/components/SelfieCapture";
 import DocumentUploadLoadingState from "@/components/common/DocumentUploadLoadingState";
 import notify from "@/lib/toast";
-import { PASSWORD_MIN_LENGTH, PASSWORD_MIN_LENGTH_MESSAGE } from "@/utils/authValidation";
+import { PASSWORD_MIN_LENGTH, PASSWORD_MIN_LENGTH_MESSAGE, isValidPassword } from "@/utils/authValidation";
 
 const TRAINER_SIGNUP_SESSION_KEY = "trainer_signup_session";
 
@@ -300,9 +300,8 @@ const Step1 = ({ onComplete, onExistingStatusChange }) => {
     setResumeTarget("");
     onExistingStatusChange?.(null);
 
-
-
-    if (String(password).length < PASSWORD_MIN_LENGTH) {
+    // Validate password strength
+    if (!isValidPassword(password)) {
       setError(PASSWORD_MIN_LENGTH_MESSAGE);
       return;
     }
@@ -468,6 +467,18 @@ const Step1 = ({ onComplete, onExistingStatusChange }) => {
                 {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
+            {password && !isValidPassword(password) && (
+              <div className="tr-pw-hint" style={{ marginTop: "8px", fontSize: "13px", color: "#ef4444" }}>
+                <AlertCircle size={14} style={{ display: "inline", marginRight: "4px" }} />
+                Password must contain: uppercase, lowercase, digit, and special character
+              </div>
+            )}
+            {password && isValidPassword(password) && (
+              <div className="tr-pw-hint" style={{ marginTop: "8px", fontSize: "13px", color: "#10b981" }}>
+                <CheckCircle size={14} style={{ display: "inline", marginRight: "4px" }} />
+                Password strength is good
+              </div>
+            )}
           </div>
           <div className="tr-field">
             <label htmlFor="reg-confirm-password">Confirm Password*</label>
@@ -2145,35 +2156,138 @@ const getResumeProgress = (registrationStep) => {
 const Step5 = ({ regData, onComplete, onBack }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [password, setPassword] = useState(regData.password || "");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
-  useEffect(() => {
-    const submit = async () => {
-      setLoading(true);
-      try {
-        await onComplete({ password: regData.password });
-      } catch (err) {
-        const message = err.message || "Failed to complete registration.";
-        setError(message);
-        notify.error(message);
-      } finally {
-        setLoading(false);
-      }
-    };
-    submit();
-  }, [onComplete, regData.password]);
+  const handleSubmit = async (e) => {
+    e?.preventDefault();
+    if (loading || submitted) return;
+
+    setError("");
+
+    if (!isValidPassword(password)) {
+      const msg = PASSWORD_MIN_LENGTH_MESSAGE;
+      setError(msg);
+      notify.error(msg);
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      const msg = "Passwords do not match.";
+      setError(msg);
+      notify.error(msg);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await onComplete({ password });
+      setSubmitted(true);
+    } catch (err) {
+      const message = err.message || "Failed to complete registration.";
+      setError(message);
+      notify.error(message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="tr-form-wrapper">
+      <h3 style={{ marginBottom: "8px", color: "var(--primary-blue, #174264)" }}>
+        Create Your Password
+      </h3>
+      <p style={{ marginBottom: "20px", color: "#64748B", fontSize: "14px" }}>
+        Set a secure password for your trainer account.
+      </p>
+
       {error && (
         <div className="tr-error-box">
           <AlertCircle size={16} />{error}
         </div>
       )}
-      {loading ? (
-        <div className="tr-btn-row">
-          <Loader size={16} className="tr-spin" /> Finalizing registration…
+
+      <form onSubmit={handleSubmit}>
+        <div className="tr-field-group">
+          <label htmlFor="step5-password">Password*</label>
+          <div className="tr-input-icon-wrapper">
+            <input
+              id="step5-password"
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Password (min 8 characters)"
+              required
+              autoComplete="new-password"
+            />
+            <button
+              type="button"
+              className="tr-toggle-password"
+              onClick={() => setShowPassword((prev) => !prev)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+          {password && !isValidPassword(password) && (
+            <p className="tr-field-hint" style={{ color: "#EF4444" }}>
+              Password must contain: uppercase, lowercase, digit, and special character
+            </p>
+          )}
+          {password && isValidPassword(password) && (
+            <p className="tr-field-hint" style={{ color: "#22C55E" }}>
+              ✓ Password strength is good
+            </p>
+          )}
         </div>
-      ) : null}
+
+        <div className="tr-field-group">
+          <label htmlFor="step5-confirm-password">Confirm Password*</label>
+          <div className="tr-input-icon-wrapper">
+            <input
+              id="step5-confirm-password"
+              type={showConfirmPassword ? "text" : "password"}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Re-enter your password"
+              required
+              autoComplete="new-password"
+            />
+            <button
+              type="button"
+              className="tr-toggle-password"
+              onClick={() => setShowConfirmPassword((prev) => !prev)}
+              aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+            >
+              {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+          {confirmPassword && password !== confirmPassword && (
+            <p className="tr-field-hint" style={{ color: "#EF4444" }}>
+              Passwords do not match
+            </p>
+          )}
+        </div>
+
+        <div className="tr-btn-row" style={{ marginTop: "24px" }}>
+          <button
+            type="submit"
+            className="tr-btn-primary"
+            disabled={loading || submitted || !password || !confirmPassword}
+          >
+            {loading ? (
+              <><Loader size={16} className="tr-spin" /> Submitting…</>
+            ) : submitted ? (
+              "Submitted ✓"
+            ) : (
+              "Complete Registration"
+            )}
+          </button>
+        </div>
+      </form>
     </div>
   );
 };
@@ -2243,6 +2357,7 @@ const TrainerRegistration = () => {
   const [agreementTemplateLoading, setAgreementTemplateLoading] =
     useState(true);
   const [isRestoringSession, setIsRestoringSession] = useState(true);
+  const hasTriggeredFinalSubmitRef = useRef(false);
 
   const hydrateRegistrationState = (data) => {
     if (!data) return;
@@ -2767,6 +2882,11 @@ const TrainerRegistration = () => {
                 <Step5
                   regData={regData}
                   onComplete={async ({ password }) => {
+                    if (hasTriggeredFinalSubmitRef.current) {
+                      return;
+                    }
+                    hasTriggeredFinalSubmitRef.current = true;
+
                     try {
                       const res = await submitFinal({
                         email: regData.email,
@@ -2785,6 +2905,8 @@ const TrainerRegistration = () => {
                         setStep(6);
                       }
                     } catch (err) {
+                      hasTriggeredFinalSubmitRef.current = false;
+
                       if (isCompletedStepConflict(err, 6)) {
                         await syncProgressFromBackend(regData.email);
                         return;

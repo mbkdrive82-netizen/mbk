@@ -74,7 +74,13 @@ const checkEmailExists = async (email, excludeId = null, excludeModel = null) =>
     };
   }
 
+  // Returns { email } query, or an impossible query when this model is excluded.
+  // IMPORTANT: never return null — Model.findOne(null) matches the first document.
   const buildQuery = (model) => {
+    if (excludeModel === model) {
+      return { _id: null }; // impossible query — findOne returns null safely
+    }
+
     const query = { email: normalizedEmail };
     if (excludeId && excludeModel === model) {
       query._id = { $ne: excludeId };
@@ -84,7 +90,8 @@ const checkEmailExists = async (email, excludeId = null, excludeModel = null) =>
 
   try {
     // Check User collection
-    const userExists = await getUser().findOne(buildQuery('User')).select('_id role').lean();
+    const userQuery = buildQuery('User');
+    const userExists = await getUser().findOne(userQuery).select('_id role').lean();
     if (userExists) {
       return {
         exists: true,

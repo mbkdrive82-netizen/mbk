@@ -10,7 +10,7 @@ export default function Loading() {
     <div className="mbk-loading-screen" aria-label="Loading…" role="status">
       <style>{`
         .mbk-loading-screen {
-          position: fixed;
+          position: absolute;
           inset: 0;
           display: flex;
           flex-direction: column;

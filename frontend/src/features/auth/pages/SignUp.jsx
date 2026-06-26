@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { safeRouterPush } from '@/utils/safeRouterNavigation';
 import { useAuth } from '@/context/AuthContext';
 import authService from '@/services/authService';
+import { studentPortalService } from '@/services/studentPortalService';
 import notify from '@/lib/toast';
 import CTAButton from '@/components/common/CTAButton';
 import PasswordInputWithToggle from '@/components/common/PasswordInputWithToggle';
@@ -16,18 +17,21 @@ import {
   PASSWORD_MIN_LENGTH,
 } from '@/utils/authValidation';
 
-const COURSES = [
-  { value: 'pcb', label: 'PCB' },
-  { value: 'iot', label: 'IoT' },
-  { value: 'employability', label: 'Employability' },
-  { value: 'surface modelling', label: 'Surface Modelling' },
-  { value: 'solid works', label: 'Solid Works' },
+const FALLBACK_COURSES = [
+  { value: 'PCB', label: 'PCB' },
+  { value: 'IoT', label: 'IoT' },
+  { value: 'Employability', label: 'Employability' },
+  { value: 'Surface Modelling', label: 'Surface Modelling' },
+  { value: 'Solid Works', label: 'Solid Works' },
 ];
 
 export default function SignupPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { registerStudent, registerCompany } = useAuth();
+  const [courses, setCourses] = useState(FALLBACK_COURSES);
+  const [isCoursesLoading, setIsCoursesLoading] = useState(true);
+  const [courseLoadError, setCourseLoadError] = useState('');
 
   const [activeTab, setActiveTab] = useState('student');
 
@@ -41,6 +45,46 @@ export default function SignupPage() {
       setActiveTab('student');
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadCourses = async () => {
+      setIsCoursesLoading(true);
+      setCourseLoadError('');
+
+      try {
+        const data = await studentPortalService.getCourses();
+        const activeCourses = Array.isArray(data) ? data : data?.data || [];
+        if (!cancelled && activeCourses.length > 0) {
+          setCourses(
+            activeCourses.map((course) => {
+              const rawTitle = String(course.title || course.name || course.label || '').trim();
+              const normalizedTitle = rawTitle || String(course._id || course.id || '').trim();
+              const displayName = normalizedTitle || 'Untitled Course';
+              return {
+                value: displayName,
+                label: displayName,
+              };
+            }),
+          );
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setCourseLoadError('Unable to load course options. Please try again later.');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsCoursesLoading(false);
+        }
+      }
+    };
+
+    loadCourses();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Student form state
   const [studentForm, setStudentForm] = useState({
@@ -149,17 +193,19 @@ export default function SignupPage() {
         safeRouterPush(router, '/company/dashboard');
       } else {
         setErrorHint('');
+        let message = response.message || 'Registration failed. Please try again.';
         if (response.status === 409) {
-          const message =
-            'This email is already registered. Your company account may have been created by an admin.';
-          setError(message);
           setErrorHint('company-exists');
-          notify.error(message);
-        } else {
-          const message = response.message || 'Registration failed.';
-          setError(message);
-          notify.error(message);
+          if (response.field === 'email') {
+            message = 'This email is already registered. Use Company Sign In or Forgot Password to recover access.';
+          } else if (response.field === 'phone') {
+            message = 'This phone number is already registered. Use Company Sign In or Forgot Password to recover access.';
+          } else {
+            message = `${message} If this account already exists, use Sign In or Forgot Password to recover access.`;
+          }
         }
+        setError(message);
+        notify.error(message);
       }
     } catch (err) {
       setErrorHint('');
@@ -389,15 +435,20 @@ export default function SignupPage() {
                   onChange={handleStudentChange}
                   className="w-full h-12 px-4 border border-gray-300 rounded-xl bg-white focus:ring-2 focus:ring-orange-500 focus:border-orange-500 focus:outline-none transition-all text-sm"
                   required
-                  disabled={loading}
+                  disabled={loading || isCoursesLoading}
                 >
-                  <option value="">Select a Course</option>
-                  {COURSES.map((c) => (
+                  <option value="">
+                    {isCoursesLoading ? 'Loading course options...' : 'Select a Course'}
+                  </option>
+                  {courses.map((c) => (
                     <option key={c.value} value={c.value}>
                       {c.label}
                     </option>
                   ))}
                 </select>
+                {courseLoadError ? (
+                  <p className="mt-2 text-sm text-red-600">{courseLoadError}</p>
+                ) : null}
               </div>
 
               <div>
