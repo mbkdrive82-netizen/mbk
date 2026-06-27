@@ -8,10 +8,16 @@
 #   Start Command = npm start
 #
 # Required in Render dashboard (not committed):
-# GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_DRIVE_FOLDER_ID, EMAIL_USER, EMAIL_PASS
-# JWT_SECRET, SESSION_SECRET, MONGODB_URI, FRONTEND_URL, BACKEND_URL
-# STREAM_CHAT_API_KEY, STREAM_CHAT_API_SECRET (optional chat)
-# PLIVO_AUTH_ID, PLIVO_AUTH_TOKEN, PLIVO_SOURCE_NUMBER (optional SMS; trainer OTP uses email)
+# GOOGLE_SERVICE_ACCOUNT_JSON, GOOGLE_DRIVE_FOLDER_ID, MONGODB_URI
+# JWT_SECRET, SESSION_SECRET, FRONTEND_URL, BACKEND_URL
+# Email (recommended Hostinger domain mailbox on Render):
+#   SMTP_HOST=smtp.hostinger.com
+#   SMTP_PORT=465
+#   SMTP_SECURE=true
+#   EMAIL_USER=official@mbktechnologies.info
+#   EMAIL_PASS=<mailbox password>
+#   EMAIL_FROM="MBK CarrierZ" <official@mbktechnologies.info>
+# Gmail fallback: EMAIL_SERVICE=gmail, EMAIL_USER, EMAIL_PASS (App Password)
 
 services:
   - type: web

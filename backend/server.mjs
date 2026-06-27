@@ -26,6 +26,7 @@ const { startAnalyticsWorker } = require("./workers/analyticsWorker.js");
 const { redis, isAvailable: isRedisAvailable } = require('./config/redis.js');
 const errorTracker = require('./middleware/errorTracker.js');
 const { validateDriveConfiguration } = require('./services/googleDriveService.js');
+const { validateEmailConfiguration } = require('./utils/emailService.js');
 const { isDriveOnlyStorage } = require('./utils/storagePolicy.js');
 
 // Redis session store — gracefully falls back to MemoryStore if unavailable
@@ -313,6 +314,17 @@ app.get("/health", (req, res) => {
 app.get("/api/health", healthCheck);
 app.get("/api/health/ready", healthCheck);
 app.get("/api/health/deep", healthCheck);
+app.get("/api/health/email", async (_req, res) => {
+  try {
+    const result = await validateEmailConfiguration();
+    return res.status(result.ok ? 200 : 503).json(result);
+  } catch (error) {
+    return res.status(503).json({
+      ok: false,
+      issues: [error?.message || "Email health check failed."],
+    });
+  }
+});
 
 // Metrics endpoint (Prometheus + JSON)
 const { router: metricsRouter, requestCounterMiddleware } = require('./routes/metricsRoutes.js');
@@ -454,6 +466,22 @@ const startServer = async (port = Number(process.env.PORT || process.env.BACKEND
             console.error("[GOOGLE-DRIVE] Startup validation error:", error.message);
           });
       }
+
+      validateEmailConfiguration()
+        .then((result) => {
+          if (!result.ok) {
+            console.error("[EMAIL] Startup validation failed:", result.issues);
+          } else {
+            console.log("[EMAIL] Startup validation passed:", {
+              primaryProfile: result.primaryProfile,
+              smtpUser: result.smtpUser,
+              from: result.from,
+            });
+          }
+        })
+        .catch((error) => {
+          console.error("[EMAIL] Startup validation error:", error.message);
+        });
 
       // Keep-alive tuning — prevents Nginx 502 errors under load.
       // keepAliveTimeout must be > Nginx's keepalive_timeout (default 75s).

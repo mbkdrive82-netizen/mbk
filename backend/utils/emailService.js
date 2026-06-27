@@ -11,70 +11,218 @@ const smtpPass = (
   .trim()
   .replace(/\s+/g, "");
 
-const resolveSmtpTransportOptions = () => {
-  const auth = { user: smtpUser, pass: smtpPass };
+const SMTP_TIMEOUT_MS = Number(process.env.SMTP_TIMEOUT_MS || 30000);
+
+const getSmtpAuth = () => ({ user: smtpUser, pass: smtpPass });
+
+const getDefaultFromAddress = () =>
+  process.env.EMAIL_FROM || `"MBK CarrierZ" <${smtpUser}>`;
+
+const buildSmtpTimeoutOptions = () => ({
+  connectionTimeout: SMTP_TIMEOUT_MS,
+  greetingTimeout: SMTP_TIMEOUT_MS,
+  socketTimeout: SMTP_TIMEOUT_MS,
+});
+
+const buildSmtpTransportProfiles = () => {
+  if (!smtpUser || !smtpPass) {
+    return [];
+  }
+
+  const auth = getSmtpAuth();
+  const timeout = buildSmtpTimeoutOptions();
+  const profiles = [];
+  const seen = new Set();
+
+  const addProfile = (label, options) => {
+    const key = JSON.stringify({ label, ...options });
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    profiles.push({ label, options: { ...options, auth } });
+  };
+
   const smtpHost = (process.env.SMTP_HOST || "").trim();
   const emailService = (process.env.EMAIL_SERVICE || "").trim().toLowerCase();
   const smtpPort = Number(process.env.SMTP_PORT || 587);
   const smtpSecure = String(process.env.SMTP_SECURE || "").trim() === "true";
+  const fallbackHost = (process.env.SMTP_FALLBACK_HOST || "").trim();
 
   if (smtpHost) {
-    return {
+    addProfile(`${smtpHost}:${smtpPort}`, {
       host: smtpHost,
       port: smtpPort,
       secure: smtpSecure,
       family: 4,
-      auth,
+      pool: true,
+      maxConnections: 1,
       tls: { rejectUnauthorized: true },
-      connectionTimeout: 15000,
-      greetingTimeout: 10000,
-      socketTimeout: 15000,
-    };
-  }
+      ...timeout,
+    });
 
-  if (emailService && !emailService.includes(".")) {
-    return {
+    if (smtpPort === 587 && !smtpSecure) {
+      addProfile(`${smtpHost}:465`, {
+        host: smtpHost,
+        port: 465,
+        secure: true,
+        family: 4,
+        pool: true,
+        maxConnections: 1,
+        tls: { rejectUnauthorized: true },
+        ...timeout,
+      });
+    }
+  } else if (emailService && !emailService.includes(".")) {
+    addProfile(emailService, {
       service: emailService,
       family: 4,
-      auth,
-      connectionTimeout: 15000,
-      greetingTimeout: 10000,
-      socketTimeout: 15000,
-    };
+      pool: true,
+      maxConnections: 1,
+      ...timeout,
+    });
+  } else {
+    addProfile("smtp.gmail.com:587", {
+      host: "smtp.gmail.com",
+      port: 587,
+      secure: false,
+      family: 4,
+      pool: true,
+      maxConnections: 1,
+      tls: { rejectUnauthorized: true },
+      ...timeout,
+    });
   }
 
-  return {
-    host: "smtp.gmail.com",
-    port: 587,
-    secure: false,
-    family: 4,
-    auth,
-    tls: { rejectUnauthorized: true },
-    connectionTimeout: 15000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
-  };
+  const usesGmail =
+    smtpHost.includes("gmail.com") ||
+    emailService === "gmail" ||
+    (!smtpHost && !emailService);
+
+  if (usesGmail) {
+    addProfile("smtp.gmail.com:465", {
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true,
+      family: 4,
+      pool: true,
+      maxConnections: 1,
+      tls: { rejectUnauthorized: true },
+      ...timeout,
+    });
+  }
+
+  if (fallbackHost) {
+    addProfile(`${fallbackHost}:465`, {
+      host: fallbackHost,
+      port: 465,
+      secure: true,
+      family: 4,
+      pool: true,
+      maxConnections: 1,
+      tls: { rejectUnauthorized: true },
+      ...timeout,
+    });
+  }
+
+  return profiles;
+};
+
+const resolveSmtpTransportOptions = () => {
+  const profiles = buildSmtpTransportProfiles();
+  return profiles[0]?.options || null;
+};
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const sendMailWithProfiles = async (mailOptions) => {
+  const profiles = buildSmtpTransportProfiles();
+  if (!profiles.length) {
+    throw new Error("Email service is not configured. Set EMAIL_USER and EMAIL_PASS on the server.");
+  }
+
+  let lastError = null;
+
+  for (const profile of profiles) {
+    const transport = nodemailer.createTransport(profile.options);
+    try {
+      const info = await transport.sendMail(mailOptions);
+      await transport.close().catch(() => {});
+      return { info, profile: profile.label };
+    } catch (error) {
+      lastError = error;
+      console.error(
+        `[EMAIL] Send failed via ${profile.label}:`,
+        error?.message || error,
+      );
+      await transport.close().catch(() => {});
+      await sleep(750);
+    }
+  }
+
+  throw lastError || new Error("Email delivery failed");
+};
+
+const validateEmailConfiguration = async () => {
+  const issues = [];
+
+  if (!smtpUser) {
+    issues.push("Missing EMAIL_USER (or SMTP_USER).");
+  }
+  if (!smtpPass) {
+    issues.push("Missing EMAIL_PASS (or EMAIL_PASSWORD / SMTP_PASS).");
+  }
+  if (issues.length) {
+    return { ok: false, issues };
+  }
+
+  const profiles = buildSmtpTransportProfiles();
+  const primary = profiles[0];
+  if (!primary) {
+    return { ok: false, issues: ["No SMTP transport profile could be built."] };
+  }
+
+  const transport = nodemailer.createTransport(primary.options);
+  try {
+    await transport.verify();
+    await transport.close().catch(() => {});
+    return {
+      ok: true,
+      smtpUser,
+      from: getDefaultFromAddress(),
+      primaryProfile: primary.label,
+      profileCount: profiles.length,
+    };
+  } catch (error) {
+    await transport.close().catch(() => {});
+    return {
+      ok: false,
+      issues: [error?.message || "SMTP verification failed."],
+      smtpUser,
+      from: getDefaultFromAddress(),
+      primaryProfile: primary.label,
+      profileCount: profiles.length,
+    };
+  }
 };
 
 // Email Configuration
 let transporter;
+const primaryTransportOptions = resolveSmtpTransportOptions();
 
-if (smtpUser && smtpPass) {
-  transporter = nodemailer.createTransport(resolveSmtpTransportOptions());
+if (primaryTransportOptions) {
+  transporter = nodemailer.createTransport(primaryTransportOptions);
 } else {
   console.warn("⚠️ No SMTP credentials configured — emails will not be sent.");
 }
 
-const isGmail = true;
 console.log("Initializing Email Service with:", {
-  service: "gmail",
-  host: "smtp.gmail.com",
+  primaryProfile: buildSmtpTransportProfiles()[0]?.label || "unconfigured",
   user: smtpUser,
   passLength: smtpPass ? smtpPass.length : 0,
+  from: getDefaultFromAddress(),
 });
 
-// NOTE: Skipping eager transporter.verify() to avoid dumping raw SMTP errors
-// (e.g. 535 BadCredentials) at startup. Email delivery is validated on first send.
 if (!smtpPass || smtpPass.length === 0) {
   console.warn("⚠️ No SMTP password configured — emails will not be sent.");
 } else {
@@ -1300,10 +1448,13 @@ const sendRegistrationOTP = async (userEmail, userName, otp) => {
   }
 
   try {
-    const info = await transporter.sendMail(mailOptions);
-    console.log("Mail Sent:", info.messageId);
-    console.log("Registration OTP email sent successfully:", info.messageId);
-    return { success: true, messageId: info.messageId };
+    const { info, profile } = await sendMailWithProfiles(mailOptions);
+    console.log(
+      "Registration OTP email sent successfully:",
+      info.messageId,
+      `via ${profile}`,
+    );
+    return { success: true, messageId: info.messageId, profile };
   } catch (error) {
     console.error("Error sending registration OTP email via SMTP:", error.message);
     return { success: false, error: error.message || String(error) };
@@ -1592,6 +1743,7 @@ module.exports = {
   sendOtpEmail,
   sendTrainerLogin,
   sendCompanyAdminWelcomeEmail,
+  validateEmailConfiguration,
 };
 
 

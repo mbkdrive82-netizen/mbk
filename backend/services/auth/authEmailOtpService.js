@@ -53,6 +53,7 @@ const sendEmailOtp = async ({
   purpose,
   recipientName = "User",
   ipAddress = "unknown",
+  awaitDelivery = false,
 }) => {
   const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail) {
@@ -95,6 +96,24 @@ const sendEmailOtp = async ({
     console.log(
       '[AUTH-OTP] ALLOW_OTP_DEBUG=1 enabled — returning debug OTP without SMTP send',
     );
+  } else if (awaitDelivery) {
+    const sendResult = await sendRegistrationOTP(
+      normalizedEmail,
+      recipientName,
+      rawOtp,
+    );
+    if (!sendResult?.success) {
+      const err = new Error(
+        sendResult?.error ||
+          "Unable to send verification email. Check spam or try again shortly.",
+      );
+      err.statusCode = 503;
+      throw err;
+    }
+    console.log(
+      "[AUTH-OTP] Registration email delivered via",
+      sendResult.profile || "smtp",
+    );
   } else {
     // OTP is already persisted — send email in the background so the API
     // responds quickly and the signup UI can open the OTP step immediately.
@@ -105,7 +124,12 @@ const sendEmailOtp = async ({
             "[AUTH-OTP] Background registration email failed:",
             sendResult?.error || "unknown error",
           );
+          return;
         }
+        console.log(
+          "[AUTH-OTP] Background registration email sent via",
+          sendResult.profile || "smtp",
+        );
       })
       .catch((emailError) => {
         console.error(

@@ -337,6 +337,7 @@ const resendTrainerRegistrationOtp = async ({ email, ipAddress }) => {
     purpose: OTP_PURPOSE.TRAINER_REGISTRATION,
     recipientName: user.name || "Trainer Candidate",
     ipAddress,
+    awaitDelivery: true,
   });
 
   user.emailOtp = null;
