@@ -192,6 +192,7 @@ const resolveOAuthDriveConfig = () => {
   const refreshToken = String(
     process.env.GOOGLE_DRIVE_REFRESH_TOKEN ||
       process.env.GOOGLE_OAUTH_REFRESH_TOKEN ||
+      process.env.GOOGLE_GMAIL_REFRESH_TOKEN ||
       process.env.GOOGLE_REFRESH_TOKEN ||
       "",
   ).trim();

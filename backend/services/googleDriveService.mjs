@@ -11,7 +11,7 @@ const AUTH_METHOD = process.env.GOOGLE_DRIVE_AUTH_METHOD || process.env.GOOGLE_D
 // OAuth 2.0 Configuration
 const OAUTH_CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GOOGLE_DRIVE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
 const OAUTH_CLIENT_SECRET = process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GOOGLE_DRIVE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET;
-const OAUTH_REFRESH_TOKEN = process.env.GOOGLE_OAUTH_REFRESH_TOKEN || process.env.GOOGLE_DRIVE_REFRESH_TOKEN || process.env.GOOGLE_REFRESH_TOKEN;
+const OAUTH_REFRESH_TOKEN = process.env.GOOGLE_OAUTH_REFRESH_TOKEN || process.env.GOOGLE_GMAIL_REFRESH_TOKEN || process.env.GOOGLE_DRIVE_REFRESH_TOKEN || process.env.GOOGLE_REFRESH_TOKEN;
 const OAUTH_REDIRECT_URL = process.env.GOOGLE_OAUTH_REDIRECT_URL || process.env.GOOGLE_DRIVE_REDIRECT_URL || 'http://localhost:5005/auth/google/callback';
 
 // Parent folder configuration - NM Trainers folder ID
@@ -43,7 +43,7 @@ const initializeGoogleDrive = async () => {
     const authMethod = process.env.GOOGLE_DRIVE_AUTH_METHOD || process.env.GOOGLE_DRIVE_AUTH_MODE || AUTH_METHOD;
     const oauthClientId = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GOOGLE_DRIVE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || OAUTH_CLIENT_ID;
     const oauthClientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GOOGLE_DRIVE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET || OAUTH_CLIENT_SECRET;
-    const oauthRefreshToken = process.env.GOOGLE_OAUTH_REFRESH_TOKEN || process.env.GOOGLE_DRIVE_REFRESH_TOKEN || process.env.GOOGLE_REFRESH_TOKEN || OAUTH_REFRESH_TOKEN;
+    const oauthRefreshToken = process.env.GOOGLE_OAUTH_REFRESH_TOKEN || process.env.GOOGLE_GMAIL_REFRESH_TOKEN || process.env.GOOGLE_DRIVE_REFRESH_TOKEN || process.env.GOOGLE_REFRESH_TOKEN || OAUTH_REFRESH_TOKEN;
     const oauthRedirectUrl = process.env.GOOGLE_OAUTH_REDIRECT_URL || process.env.GOOGLE_DRIVE_REDIRECT_URL || OAUTH_REDIRECT_URL;
 
     let auth;
