@@ -1,60 +1,69 @@
 const nodemailer = require("nodemailer");
 const welcomeEmailTemplate = require("./welcomeEmailTemplate");
 
-const smtpUser = (process.env.EMAIL_USER || process.env.SMTP_USER || "mbktechnologies8@gmail.com").trim();
-const smtpPass = process.env.EMAIL_PASS || process.env.SMTP_PASS || "cici ixth yfnh icfj"; // Preserve spaces
+const smtpUser = (process.env.EMAIL_USER || process.env.SMTP_USER || "").trim();
+const smtpPass = (
+  process.env.EMAIL_PASS ||
+  process.env.EMAIL_PASSWORD ||
+  process.env.SMTP_PASS ||
+  ""
+)
+  .trim()
+  .replace(/\s+/g, "");
+
+const resolveSmtpTransportOptions = () => {
+  const auth = { user: smtpUser, pass: smtpPass };
+  const smtpHost = (process.env.SMTP_HOST || "").trim();
+  const emailService = (process.env.EMAIL_SERVICE || "").trim().toLowerCase();
+  const smtpPort = Number(process.env.SMTP_PORT || 587);
+  const smtpSecure = String(process.env.SMTP_SECURE || "").trim() === "true";
+
+  if (smtpHost) {
+    return {
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpSecure,
+      family: 4,
+      auth,
+      tls: { rejectUnauthorized: true },
+      connectionTimeout: 15000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
+    };
+  }
+
+  if (emailService && !emailService.includes(".")) {
+    return {
+      service: emailService,
+      family: 4,
+      auth,
+      connectionTimeout: 15000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
+    };
+  }
+
+  return {
+    host: "smtp.gmail.com",
+    port: 587,
+    secure: false,
+    family: 4,
+    auth,
+    tls: { rejectUnauthorized: true },
+    connectionTimeout: 15000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
+  };
+};
 
 // Email Configuration
 let transporter;
 
-// Force explicit STARTTLS connection on port 587 for Gmail to bypass Render's port 465 blocks.
-// Force family: 4 (IPv4) to prevent IPv6 network unreachable errors.
-transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 587,
-  secure: false, // Use STARTTLS
-  family: 4,     // Force IPv4 only
-  auth: {
-    user: smtpUser,
-    pass: smtpPass,
-  },
-  tls: { 
-    rejectUnauthorized: false,
-    ciphers: 'SSLv3'
-  },
-});
-
-// Centralized Non-Blocking Wrapper: Prevents Render SMTP blocks from causing connection timeouts.
-const originalSendMail = transporter.sendMail.bind(transporter);
-transporter.sendMail = function (mailOptions, callback) {
-  const dummyInfo = { messageId: "bg-queued-" + Date.now() };
-
-  // Handle callback signature
-  if (typeof callback === "function") {
-    originalSendMail(mailOptions, (err, info) => {
-      if (err) console.warn("[SMTP-BACKGROUND] Delivery failed:", err.message);
-      else console.log("[SMTP-BACKGROUND] Delivery success:", info.messageId);
-    });
-    return callback(null, dummyInfo);
-  }
-
-  // Handle promise signature
-  return new Promise((resolve) => {
-    originalSendMail(mailOptions, (err, info) => {
-      if (err) console.warn("[SMTP-BACKGROUND] Delivery failed:", err.message);
-      else console.log("[SMTP-BACKGROUND] Delivery success:", info?.messageId);
-    });
-    resolve(dummyInfo);
-  });
-};
-
-transporter.verify((error, success) => {
-  if (error) {
-    console.error("SMTP Configuration Error:", error);
-  } else {
-    console.log("Server is ready to take our messages");
-  }
-});
+if (smtpUser && smtpPass) {
+  transporter = nodemailer.createTransport(resolveSmtpTransportOptions());
+} else {
+  console.warn("⚠️ No SMTP credentials configured — emails will not be sent.");
+}
 
 const isGmail = true;
 console.log("Initializing Email Service with:", {
@@ -74,6 +83,10 @@ if (!smtpPass || smtpPass.length === 0) {
 
 // Generic sendMail helper — supports optional html body
 const sendMail = async (to, subject, text, html = null, attachments = null) => {
+  if (!transporter) {
+    throw new Error("Email service is not configured. Set EMAIL_USER and EMAIL_PASS on the server.");
+  }
+
   const mailOptions = {
     from: process.env.EMAIL_FROM || `"MBK CarrierZ" <${smtpUser}>`,
     to,
@@ -85,29 +98,8 @@ const sendMail = async (to, subject, text, html = null, attachments = null) => {
   try {
     return await transporter.sendMail(mailOptions);
   } catch (error) {
-    console.error("Error sending email:", error);
-    // Fallback to Ethereal test account
-    try {
-      const testAccount = await nodemailer.createTestAccount();
-      const etherealTransporter = nodemailer.createTransport({
-        host: testAccount.smtp.host,
-        port: testAccount.smtp.port,
-        secure: testAccount.smtp.secure,
-        auth: {
-          user: testAccount.user,
-          pass: testAccount.pass,
-        },
-      });
-      const info = await etherealTransporter.sendMail(mailOptions);
-      console.log("Ethereal fallback email sent:", info.messageId);
-      if (process.env.NODE_ENV !== "production") {
-        console.log("Preview URL:", nodemailer.getTestMessageUrl(info));
-      }
-      return info;
-    } catch (fallbackError) {
-      console.error("Ethereal fallback failed:", fallbackError);
-      throw fallbackError;
-    }
+    console.error("Error sending email:", error.message || error);
+    throw error;
   }
 };
 
@@ -1298,6 +1290,14 @@ const sendRegistrationOTP = async (userEmail, userName, otp) => {
         `,
   };
 
+  if (!transporter) {
+    console.error("Registration OTP email skipped: SMTP is not configured.");
+    return {
+      success: false,
+      error: "Email service is not configured on the server.",
+    };
+  }
+
   try {
     const info = await transporter.sendMail(mailOptions);
     console.log("Mail Sent:", info.messageId);
@@ -1305,10 +1305,6 @@ const sendRegistrationOTP = async (userEmail, userName, otp) => {
     return { success: true, messageId: info.messageId };
   } catch (error) {
     console.error("Error sending registration OTP email via SMTP:", error.message);
-    if (process.env.NODE_ENV === "production") {
-      return { success: false, error: error.message || String(error) };
-    }
-    console.log("Proceeding with flow using locally logged OTP...");
     return { success: false, error: error.message || String(error) };
   }
 };

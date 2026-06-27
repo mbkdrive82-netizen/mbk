@@ -4,6 +4,7 @@
  */
 
 const DEFAULT_DEV_API_ORIGIN = 'http://localhost:5005';
+export const PRODUCTION_API_ORIGIN = 'https://mbk-project.onrender.com';
 
 const rawApiUrl = (
   process.env.NEXT_PUBLIC_API_URL ||
@@ -12,10 +13,26 @@ const rawApiUrl = (
   ''
 ).trim();
 
+/** True when the app is served from the Hostinger production domain. */
+export const isProductionFrontendHost = () => {
+  if (typeof window === 'undefined') return false;
+  const hostname = window.location.hostname.toLowerCase();
+  return (
+    hostname === 'mbktechnologies.info' ||
+    hostname === 'www.mbktechnologies.info' ||
+    hostname.endsWith('.mbktechnologies.info')
+  );
+};
+
 /** Backend origin without trailing slash or /api suffix (e.g. http://localhost:5005) */
 export const getApiOrigin = () => {
-  const value = rawApiUrl || DEFAULT_DEV_API_ORIGIN;
-  return value.replace(/\/+$/, '').replace(/\/api\/?$/i, '');
+  if (rawApiUrl) {
+    return rawApiUrl.replace(/\/+$/, '').replace(/\/api\/?$/i, '');
+  }
+  if (isProductionFrontendHost()) {
+    return PRODUCTION_API_ORIGIN;
+  }
+  return DEFAULT_DEV_API_ORIGIN;
 };
 
 /** REST API base including /api prefix */

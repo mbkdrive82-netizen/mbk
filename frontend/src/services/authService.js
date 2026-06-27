@@ -10,6 +10,7 @@ import {
   getApiOrigin,
   getResolvedApiOrigin,
   getSimpleAuthBaseUrl,
+  isProductionFrontendHost,
   resetDiscoveredApiOrigin,
 } from "@/config/apiConfig";
 import { isKnownPortalRole, normalizeAuthUser } from "@/utils/authRoles";
@@ -64,9 +65,14 @@ const resolveSimpleAuthBaseUrl = async () => {
     return API_BASE_URL;
   }
 
-  const hasExplicitOrigin = Boolean(
-    (process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_BASE_URL || process.env.API_ORIGIN || '').trim(),
-  );
+  const hasExplicitOrigin =
+    Boolean(
+      (process.env.NEXT_PUBLIC_API_URL ||
+        process.env.NEXT_PUBLIC_API_BASE_URL ||
+        process.env.API_ORIGIN ||
+        '').trim(),
+    ) ||
+    (typeof window !== 'undefined' && isProductionFrontendHost());
 
   if (!hasExplicitOrigin) {
     API_BASE_URL = '/api/simple-auth';

@@ -25,6 +25,7 @@ const resolveDefaultDriveFolderId = () =>
     process.env.GOOGLE_DRIVE_FOLDER_ID ||
       process.env.GOOGLE_DRIVE_TRAINER_DOCUMENTS_FOLDER_ID ||
       process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID ||
+      process.env.GOOGLE_DRIVE_PARENT_FOLDER_ID ||
       process.env.GOOGLE_DRIVE_ROOT_FOLDER ||
       "",
   ).trim();

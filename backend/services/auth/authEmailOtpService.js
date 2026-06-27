@@ -97,34 +97,23 @@ const sendEmailOtp = async ({
     try {
       const sendResult = await sendRegistrationOTP(normalizedEmail, recipientName, rawOtp);
       if (!sendResult.success) {
-        if (process.env.NODE_ENV === "production") {
-          const err = new Error(
-            sendResult.error || "Failed to deliver OTP to your email address",
-          );
-          err.statusCode = 502;
-          throw err;
-        }
-        deliveryMode = "debug";
-        debugOtp = rawOtp;
-        console.warn(
-          "[AUTH-OTP] Email delivery failed in non-production:",
-          sendResult.error || "unknown error",
-        );
-      }
-    } catch (emailError) {
-      if (process.env.NODE_ENV === "production") {
         const err = new Error(
-          emailError?.message || "Failed to deliver OTP to your email address",
+          sendResult.error ||
+            "Unable to send verification email. Please try again in a moment.",
         );
-        err.statusCode = 502;
+        err.statusCode = 503;
         throw err;
       }
-      deliveryMode = "debug";
-      debugOtp = rawOtp;
-      console.warn(
-        "[AUTH-OTP] Email delivery failed in non-production:",
-        emailError?.message || emailError,
+    } catch (emailError) {
+      if (emailError.statusCode) {
+        throw emailError;
+      }
+      const err = new Error(
+        emailError?.message ||
+          "Unable to send verification email. Please try again in a moment.",
       );
+      err.statusCode = 503;
+      throw err;
     }
   }
 

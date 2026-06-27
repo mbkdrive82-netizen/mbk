@@ -3,6 +3,7 @@ import {
   discoverApiOrigin,
   getApiOrigin,
   getApiBaseUrl,
+  isProductionFrontendHost,
   LOCAL_API_PORT_FALLBACKS,
   resetDiscoveredApiOrigin,
 } from "@/config/apiConfig";
@@ -15,9 +16,14 @@ import {
 const cleanBaseUrl = getApiOrigin();
 // Treat explicit origin carefully: prefer the Next.js proxy when the configured
 // origin points at localhost and the app is running in the browser on localhost.
-let hasExplicitOrigin = Boolean(
-  (process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_BASE_URL || process.env.API_ORIGIN || "").trim(),
-);
+let hasExplicitOrigin =
+  Boolean(
+    (process.env.NEXT_PUBLIC_API_URL ||
+      process.env.NEXT_PUBLIC_API_BASE_URL ||
+      process.env.API_ORIGIN ||
+      "").trim(),
+  ) ||
+  (typeof window !== "undefined" && isProductionFrontendHost());
 if (hasExplicitOrigin && typeof window !== "undefined") {
   try {
     const parsed = new URL(cleanBaseUrl || "http://localhost");
@@ -34,9 +40,25 @@ if (hasExplicitOrigin && typeof window !== "undefined") {
 }
 
 // Use explicit origin when configured; otherwise proxy via Next.js /api rewrite in dev
-export const API_BASE_URL = hasExplicitOrigin ? getApiBaseUrl() : "/api";
-// FILE_BASE_URL should only be set if an explicit origin is configured; otherwise always use the proxy
-export const FILE_BASE_URL = hasExplicitOrigin ? cleanBaseUrl : "";
+const resolveApiBaseUrl = () => {
+  if (typeof window !== "undefined" && isProductionFrontendHost()) {
+    return getApiBaseUrl();
+  }
+  if (hasExplicitOrigin) {
+    return getApiBaseUrl();
+  }
+  return "/api";
+};
+
+const resolveFileBaseUrl = () => {
+  if (typeof window !== "undefined" && isProductionFrontendHost()) {
+    return getApiOrigin();
+  }
+  return hasExplicitOrigin ? cleanBaseUrl : "";
+};
+
+export const API_BASE_URL = resolveApiBaseUrl();
+export const FILE_BASE_URL = resolveFileBaseUrl();
 const API_DEBUG = process.env.NEXT_PUBLIC_ENABLE_API_DEBUG === "true";
 const debugLog = (...args) => {
   if (API_DEBUG) {
@@ -130,7 +152,8 @@ const nowMs = () =>
     ? performance.now()
     : Date.now();
 const DEFAULT_REQUEST_TIMEOUT_MS = Number(
-  process.env.NEXT_PUBLIC_API_TIMEOUT_MS || 20000,
+  process.env.NEXT_PUBLIC_API_TIMEOUT_MS ||
+    (typeof window !== "undefined" && isProductionFrontendHost() ? 45000 : 20000),
 );
 const DEFAULT_UPLOAD_TIMEOUT_MS = Number(
   process.env.NEXT_PUBLIC_API_UPLOAD_TIMEOUT_MS || 180000,
@@ -578,12 +601,14 @@ const refreshAccessToken = async () => {
  * Fetch wrapper with retry logic for 401s
  */
 const fetchWithAuth = async (endpoint, options = {}) => {
+  const apiBaseUrl = resolveApiBaseUrl();
+  const fileBaseUrl = resolveFileBaseUrl();
   // Intelligent URL construction:
   let url;
   if (endpoint.startsWith("/api/")) {
-    url = `${FILE_BASE_URL}${endpoint}`;
+    url = `${fileBaseUrl}${endpoint}`;
   } else {
-    url = `${API_BASE_URL}${endpoint}`;
+    url = `${apiBaseUrl}${endpoint}`;
   }
 
   const method = (options.method || "GET").toUpperCase();

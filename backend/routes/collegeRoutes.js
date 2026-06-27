@@ -1298,13 +1298,14 @@ router.post('/:id/assign-trainers', authenticate, isSPOCAdmin, async (req, res) 
 
             // -------------------------------------------------
             // AUTO-CREATE Google Drive folder hierarchy for this
-            // trainer under NM Trainers/{TrainerCode}/{CollegeName}/day_1..12/{attendance,geo_tag,excel_sheet}
+            // trainer under NM Trainers/{TrainerName}/{CollegeName}/Day 1..12/{Attendance,Geo Tag}
             // -------------------------------------------------
+            let collegeHierarchy = null;
             if (isTrainingDriveEnabled()) {
                 try {
                     const trainerDoc = await Trainer.findById(trainer._id);
                     if (trainerDoc) {
-                        const collegeHierarchy = await ensureTrainerCollegeHierarchy({
+                        collegeHierarchy = await ensureTrainerCollegeHierarchy({
                             trainer: trainerDoc,
                             collegeName: college.name,
                             totalDays: 12,
@@ -1368,6 +1369,8 @@ router.post('/:id/assign-trainers', authenticate, isSPOCAdmin, async (req, res) 
 
             // Create schedules if provided
             const createdSchedules = [];
+            const dayFoldersByNumber =
+                collegeHierarchy?.dayFoldersByDayNumber || null;
             if (trainerData.schedules && trainerData.schedules.length > 0) {
                 for (const schedule of trainerData.schedules) {
                     if (!schedule.startTime || !schedule.endTime) {
@@ -1375,6 +1378,12 @@ router.post('/:id/assign-trainers', authenticate, isSPOCAdmin, async (req, res) 
                         continue;
                     }
                     try {
+                        const scheduleDayNumber = Math.max(
+                            1,
+                            Number(schedule.dayNumber || schedule.day || 1) || 1,
+                        );
+                        const dayFolderRefs =
+                            dayFoldersByNumber?.[scheduleDayNumber] || null;
                         const newSchedule = await Schedule.create({
                             trainerId: trainer._id,
                             collegeId: college._id,
@@ -1384,7 +1393,23 @@ router.post('/:id/assign-trainers', authenticate, isSPOCAdmin, async (req, res) 
                             startTime: schedule.startTime,
                             endTime: schedule.endTime,
                             subject: schedule.subject || null,
-                            dayNumber: 1 // Default dayNumber to 1 so that it satisfies validation and is actionable
+                            dayNumber: scheduleDayNumber,
+                            ...(dayFolderRefs?.id
+                                ? {
+                                      dayFolderId: dayFolderRefs.id,
+                                      dayFolderName: `Day ${scheduleDayNumber}`,
+                                      attendanceFolderId:
+                                          dayFolderRefs.attendanceFolder?.id ||
+                                          null,
+                                      attendanceFolderName: 'Attendance',
+                                      geoTagFolderId:
+                                          dayFolderRefs.geoTagFolder?.id ||
+                                          null,
+                                      geoTagFolderName: 'Geo Tag',
+                                      driveFolderId: dayFolderRefs.id,
+                                      driveFolderName: `Day ${scheduleDayNumber}`,
+                                  }
+                                : {}),
                         });
                         createdSchedules.push(newSchedule);
                     } catch (schedErr) {

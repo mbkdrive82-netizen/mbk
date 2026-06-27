@@ -43,6 +43,7 @@ const {
     isTrainingDriveEnabled,
     ensureTrainingRootFolder,
     ensureDepartmentHierarchy,
+    ensureTrainerCollegeHierarchy,
     toDepartmentDayFolders,
 } = require('../modules/drive/driveGateway');
 const {
@@ -1284,6 +1285,96 @@ const persistDepartmentDayFolderEntry = async ({
     await department.save();
 };
 
+const resolveTrainerCollegeDayFolders = async ({ scheduleId, fullSchedule }) => {
+    if (!scheduleId || !fullSchedule?.trainerId || !fullSchedule?.collegeId) {
+        return null;
+    }
+
+    const dayNumber = toDayNumber(fullSchedule.dayNumber);
+    if (!Number.isFinite(dayNumber) || dayNumber <= 0) {
+        return null;
+    }
+
+    const trainer = await Trainer.findById(fullSchedule.trainerId).select(
+        'colleges driveFolderId firstName lastName name email trainerId',
+    );
+    if (!trainer) {
+        return null;
+    }
+
+    const collegeId = String(fullSchedule.collegeId);
+    let collegeEntry = Array.isArray(trainer.colleges)
+        ? trainer.colleges.find((entry) => String(entry.collegeId) === collegeId)
+        : null;
+
+    let dayFolderEntry = Array.isArray(collegeEntry?.dayFolders)
+        ? collegeEntry.dayFolders.find((entry) => Number(entry.day) === dayNumber)
+        : null;
+
+    if (!dayFolderEntry?.dayFolderId) {
+        const college = await College.findById(fullSchedule.collegeId).select('name');
+        if (!college?.name) {
+            return null;
+        }
+
+        try {
+            const hierarchy = await ensureTrainerCollegeHierarchy({
+                trainer,
+                collegeName: college.name,
+                totalDays: 12,
+            });
+            const dayFolders = hierarchy?.dayFoldersByDayNumber?.[dayNumber];
+            if (!dayFolders?.id) {
+                return null;
+            }
+
+            dayFolderEntry = {
+                dayFolderId: dayFolders.id,
+                attendance: dayFolders.attendanceFolder?.id || null,
+                geo_tag: dayFolders.geoTagFolder?.id || null,
+            };
+        } catch (error) {
+            console.warn(
+                `[GOOGLE-DRIVE] Trainer college hierarchy ensure failed for schedule ${scheduleId}:`,
+                error.message,
+            );
+            return null;
+        }
+    }
+
+    if (!dayFolderEntry?.dayFolderId) {
+        return null;
+    }
+
+    const scheduleFolderState = {
+        dayFolderId: dayFolderEntry.dayFolderId,
+        dayFolderName: `Day ${dayNumber}`,
+        dayFolderLink: null,
+        attendanceFolderId:
+            dayFolderEntry.attendance ||
+            dayFolderEntry.attendanceFolderId ||
+            null,
+        attendanceFolderName: 'Attendance',
+        attendanceFolderLink: null,
+        geoTagFolderId:
+            dayFolderEntry.geo_tag ||
+            dayFolderEntry.geoTagFolderId ||
+            null,
+        geoTagFolderName: 'Geo Tag',
+        geoTagFolderLink: null,
+        driveFolderId: dayFolderEntry.dayFolderId,
+        driveFolderName: `Day ${dayNumber}`,
+        driveFolderLink: null,
+    };
+
+    await Schedule.findByIdAndUpdate(scheduleId, { $set: scheduleFolderState });
+    return {
+        ...scheduleFolderState,
+        departmentId: fullSchedule.departmentId,
+        dayNumber,
+    };
+};
+
 const ensureScheduleDriveFolders = async ({ scheduleId, scheduleDoc }) => {
     if (!scheduleId) return null;
 
@@ -1294,6 +1385,14 @@ const ensureScheduleDriveFolders = async ({ scheduleId, scheduleDoc }) => {
 
     const dayNumber = toDayNumber(fullSchedule.dayNumber);
     if (!Number.isFinite(dayNumber) || dayNumber <= 0) return null;
+
+    const trainerCentricFolders = await resolveTrainerCollegeDayFolders({
+        scheduleId,
+        fullSchedule,
+    });
+    if (trainerCentricFolders?.dayFolderId) {
+        return trainerCentricFolders;
+    }
 
     const department = fullSchedule.departmentId
         ? await Department.findById(fullSchedule.departmentId).select('_id name companyId courseId collegeId dayFolders driveFolderId driveFolderName driveFolderLink')

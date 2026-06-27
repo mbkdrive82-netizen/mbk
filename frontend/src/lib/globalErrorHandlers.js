@@ -79,7 +79,12 @@ export const setupGlobalErrorHandlers = () => {
     } catch (error) {
       // Don't log expected aborts/cancellations (unmount, refetch, timeout).
       if (!isAbortError(error)) {
-        console.error('❌ Network error:', error.message);
+        const message =
+          error?.message ||
+          (error instanceof TypeError
+            ? "Unable to reach the server. Please check your connection and try again."
+            : "Network request failed.");
+        console.error("❌ Network error:", message);
       }
       throw error;
     }

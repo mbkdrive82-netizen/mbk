@@ -264,11 +264,11 @@ const initTrainerRegistration = async ({
   // Auto-create Google Drive folder structure for the trainer (Non-blocking background task)
   Promise.resolve().then(async () => {
     try {
-      const { ensureTrainerFolderStructure } = await import("../trainerGoogleDriveAutoSaveService.mjs");
-      await ensureTrainerFolderStructure(
-        trainer._id,
-        `${trainer.firstName || "Trainer"}_${trainer.lastName || trainer.email.split("@")[0]}`
-      );
+      const { ensureTrainerDocumentHierarchy } = require("../../modules/drive/driveTrainerDocuments.service.js");
+      await ensureTrainerDocumentHierarchy({
+        trainer,
+        persistTrainer: true
+      });
     } catch (driveError) {
       console.warn("[AUTO-SAVE] Failed to create Google Drive folders for trainer in background:", driveError.message);
     }

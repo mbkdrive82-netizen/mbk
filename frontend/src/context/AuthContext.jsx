@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 // Removed unused import of fetchWithTimeout
 import authService, { studentAuthService, companyAuthService, setAuthCookie, clearAuthCookie, markPortalLoginSession, clearClientAuthSession } from '../services/authService';
-import { discoverApiOrigin } from '@/config/apiConfig';
+import { discoverApiOrigin, isProductionFrontendHost } from '@/config/apiConfig';
 import { loginTypeMatchesUser, normalizeAuthUser, isKnownPortalRole } from '@/utils/authRoles';
 import { validateLoginForm } from '@/utils/authValidation';
 import { getUnauthenticatedLoginPath } from '@/utils/authRedirects';
@@ -370,8 +370,11 @@ export const AuthProvider = ({ children }) => {
       return err;
     };
 
-    // Timeout wrapper for slow connections
-    const withTimeout = (promise, ms = 15000) =>
+    const loginTimeoutMs =
+      typeof window !== 'undefined' && isProductionFrontendHost() ? 45000 : 15000;
+
+    // Timeout wrapper for slow connections (Render cold starts on production)
+    const withTimeout = (promise, ms = loginTimeoutMs) =>
       Promise.race([
         promise,
         new Promise((_, reject) =>
@@ -478,7 +481,7 @@ export const AuthProvider = ({ children }) => {
             },
             body: JSON.stringify(requestBody),
           }),
-          10000 // 10‑second timeout
+          45000
         );
 
         const data = await parseApiJsonResponse(response);

@@ -9,6 +9,7 @@ node_modules/
 **/.env
 **/.env.*
 **/.env.local
+backend/restore_env.js
 !.env.example
 !**/.env.example
 !**/.env.example.secure

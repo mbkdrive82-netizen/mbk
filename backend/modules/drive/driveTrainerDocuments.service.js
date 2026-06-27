@@ -8,7 +8,7 @@ const {
 } = require("../../services/googleDriveService");
 
 const TRAINER_DOCUMENTS_SUBFOLDER_NAME = String(
-  process.env.GOOGLE_DRIVE_TRAINER_DOCUMENTS_SUBFOLDER_NAME || "documents",
+  process.env.GOOGLE_DRIVE_TRAINER_DOCUMENTS_SUBFOLDER_NAME || "Documents",
 ).trim();
 
 const TRAINER_REGISTRATION_FOLDER_NAME = String(

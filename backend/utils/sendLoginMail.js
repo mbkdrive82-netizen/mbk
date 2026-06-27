@@ -1,14 +1,28 @@
 const nodemailer = require('nodemailer');
 
-const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: process.env.SMTP_PORT || 587,
-    secure: process.env.SMTP_SECURE === 'true',
-    auth: {
-        user: process.env.SMTP_USER || process.env.EMAIL_USER || 'mbktechnologies8@gmail.com',
-        pass: (process.env.SMTP_PASS || process.env.EMAIL_PASS || 'cici ixth yfnh icfj').replace(/\s+/g, '')
-    }
-});
+const smtpUser = (process.env.SMTP_USER || process.env.EMAIL_USER || '').trim();
+const smtpPass = (
+  process.env.SMTP_PASS ||
+  process.env.EMAIL_PASS ||
+  process.env.EMAIL_PASSWORD ||
+  ''
+)
+  .trim()
+  .replace(/\s+/g, '');
+
+const transporter =
+  smtpUser && smtpPass
+    ? nodemailer.createTransport({
+        host: process.env.SMTP_HOST || 'smtp.gmail.com',
+        port: Number(process.env.SMTP_PORT || 587),
+        secure: process.env.SMTP_SECURE === 'true',
+        family: 4,
+        auth: {
+          user: smtpUser,
+          pass: smtpPass,
+        },
+      })
+    : null;
 
 const sendLoginMail = async (email, password, name) => {
   const loginLink = `${process.env.FRONTEND_URL || 'https://mbkcarrierz.com'}/login`;
@@ -137,6 +151,10 @@ const sendLoginMail = async (email, password, name) => {
   </body>
   </html>
   `;
+
+  if (!transporter) {
+    throw new Error('Email service is not configured. Set EMAIL_USER and EMAIL_PASS on the server.');
+  }
 
   try {
     const info = await transporter.sendMail({

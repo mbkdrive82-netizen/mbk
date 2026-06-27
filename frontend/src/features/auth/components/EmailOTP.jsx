@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Mail, CheckCircle, AlertCircle, Loader } from 'lucide-react';
+import { registrationInit, verifyOtp } from '@/services/authService';
 
 const EmailOTP = ({ email, password, onSuccess, onCancel }) => {
     const [otp, setOtp] = useState('');
@@ -15,16 +16,9 @@ const EmailOTP = ({ email, password, onSuccess, onCancel }) => {
         setMessage('Sending OTP to your email...');
 
         try {
-            // Re-trigger the registration init endpoint to send the OTP.
-            // We pass the password they entered so it doesn't get wiped/randomized.
-            const response = await fetch('/api/auth/register/trainer', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password })
-            });
-            const data = await response.json();
+            const data = await registrationInit({ email, password });
 
-            if (data.success) {
+            if (data?.success !== false) {
                 setOtpSent(true);
                 setMessage('OTP Sent Successfully. Please check your email inbox.');
             } else {
@@ -33,7 +27,7 @@ const EmailOTP = ({ email, password, onSuccess, onCancel }) => {
             }
         } catch (err) {
             console.error(err);
-            setError('Network error. Failed to send OTP.');
+            setError(err?.message || 'Network error. Failed to send OTP.');
             setMessage('');
         } finally {
             setIsLoading(false);
@@ -51,14 +45,9 @@ const EmailOTP = ({ email, password, onSuccess, onCancel }) => {
         setMessage('Verifying...');
 
         try {
-            const response = await fetch('/api/auth/register/trainer/verify-otp', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, otp })
-            });
-            const data = await response.json();
+            const data = await verifyOtp({ email, otp });
 
-            if (data.success) {
+            if (data?.success !== false) {
                 setMessage('Verified Successfully! Logging you in...');
                 if (onSuccess) onSuccess();
             } else {
@@ -67,7 +56,7 @@ const EmailOTP = ({ email, password, onSuccess, onCancel }) => {
             }
         } catch (err) {
             console.error(err);
-            setError('Network error. Failed to verify OTP.');
+            setError(err?.message || 'Network error. Failed to verify OTP.');
             setMessage('');
         } finally {
             setIsLoading(false);

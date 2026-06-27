@@ -143,8 +143,23 @@ const isTrainerRole = (role) => normalizeRole(role) === "trainer";
 const isSuperAdminRole = (role) => normalizeRole(role) === "superadmin";
 
 const buildDriveDocumentFileName = (documentKey, originalName) => {
-  const extension = path.extname(String(originalName || "")).toLowerCase();
-  return `${documentKey}${extension}`;
+  const extension =
+    path.extname(String(originalName || "")).toLowerCase() ||
+    (documentKey === "passportPhoto" || documentKey === "selfiePhoto"
+      ? ".jpg"
+      : ".pdf");
+  const driveFileNames = {
+    aadharFront: "Aadhaar Front",
+    aadharBack: "Aadhaar Back",
+    pan: "PAN",
+    passbook: "Bank Passbook",
+    degreePdf: "Degree Certificate",
+    resumePdf: "Resume",
+    passportPhoto: "Profile Image",
+    selfiePhoto: "Selfie Photo",
+  };
+  const baseName = driveFileNames[documentKey] || documentKey;
+  return `${baseName}${extension}`;
 };
 
 const buildVerificationKeys = (documentType) => getDocumentKeysForType(documentType);
@@ -177,9 +192,9 @@ const buildProfilePictureDriveFileName = (file = {}) => {
   const extension =
     PROFILE_PICTURE_MIME_EXTENSION_MAP[file.mimetype] ||
     path.extname(file.originalname || "") ||
-    "";
+    ".jpg";
 
-  return `ProfilePicture${extension}`;
+  return `Profile Image${extension.startsWith(".") ? extension : `.${extension}`}`;
 };
 
 const toPlainObject = (value) =>
