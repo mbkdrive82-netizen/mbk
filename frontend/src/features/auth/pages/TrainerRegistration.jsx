@@ -346,10 +346,16 @@ const Step1 = ({ onComplete, onExistingStatusChange }) => {
         setResumeTarget(checkResponse.nextStepLabel || "");
       }
 
-      await registrationInit({ email, password });
+      const initResult = await registrationInit({ email, password });
       setPhase("otp_sent");
       setCountdown(60);
-      notify.success("Verification code sent to your email.");
+      if (initResult?.debugOtp) {
+        setOtp(String(initResult.debugOtp));
+        setNotice(`Verification code: ${initResult.debugOtp} (displayed due to email timeout)`);
+        notify.success(`Verification code generated: ${initResult.debugOtp}`);
+      } else {
+        notify.success("Verification code sent to your email.");
+      }
     } catch (err) {
       const message = err.message || "Failed to send OTP. Please try again.";
       setError(message);
@@ -363,9 +369,17 @@ const Step1 = ({ onComplete, onExistingStatusChange }) => {
     if (countdown > 0) return;
     setLoading(true);
     setError("");
+    setNotice("");
     try {
-      await registrationInit({ email, password });
+      const initResult = await registrationInit({ email, password });
       setCountdown(60);
+      if (initResult?.debugOtp) {
+        setOtp(String(initResult.debugOtp));
+        setNotice(`Verification code: ${initResult.debugOtp} (displayed due to email timeout)`);
+        notify.success(`Verification code generated: ${initResult.debugOtp}`);
+      } else {
+        notify.success("Verification code resent to your email.");
+      }
     } catch (err) {
       setError(err.message || "Failed to resend OTP.");
     } finally {
