@@ -261,17 +261,18 @@ const initTrainerRegistration = async ({
     { upsert: true, new: true, setDefaultsOnInsert: true },
   );
 
-  // Auto-create Google Drive folder structure for the trainer
-  try {
-    const { ensureTrainerFolderStructure } = await import("../trainerGoogleDriveAutoSaveService.mjs");
-    await ensureTrainerFolderStructure(
-      trainer._id,
-      `${trainer.firstName || "Trainer"}_${trainer.lastName || trainer.email.split("@")[0]}`
-    );
-  } catch (driveError) {
-    console.warn("[AUTO-SAVE] Failed to create Google Drive folders for trainer:", driveError.message);
-    // Don't fail registration if Drive fails
-  }
+  // Auto-create Google Drive folder structure for the trainer (Non-blocking background task)
+  Promise.resolve().then(async () => {
+    try {
+      const { ensureTrainerFolderStructure } = await import("../trainerGoogleDriveAutoSaveService.mjs");
+      await ensureTrainerFolderStructure(
+        trainer._id,
+        `${trainer.firstName || "Trainer"}_${trainer.lastName || trainer.email.split("@")[0]}`
+      );
+    } catch (driveError) {
+      console.warn("[AUTO-SAVE] Failed to create Google Drive folders for trainer in background:", driveError.message);
+    }
+  });
 
   const otpResult = await sendEmailOtp({
     email: normalizedEmail,
