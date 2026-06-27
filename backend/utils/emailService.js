@@ -30,9 +30,10 @@ transporter.verify((error, success) => {
   }
 });
 
+const isGmail = true;
 console.log("Initializing Email Service with:", {
-  service: isGmail ? "gmail" : "custom host",
-  host: isGmail ? "smtp.gmail.com" : (process.env.SMTP_HOST || "smtp.gmail.com"),
+  service: "gmail",
+  host: "smtp.gmail.com",
   user: smtpUser,
   passLength: smtpPass ? smtpPass.length : 0,
 });
