@@ -153,7 +153,7 @@ const nowMs = () =>
     : Date.now();
 const DEFAULT_REQUEST_TIMEOUT_MS = Number(
   process.env.NEXT_PUBLIC_API_TIMEOUT_MS ||
-    (typeof window !== "undefined" && isProductionFrontendHost() ? 45000 : 20000),
+    (typeof window !== "undefined" && isProductionFrontendHost() ? 45000 : 60000),
 );
 const DEFAULT_UPLOAD_TIMEOUT_MS = Number(
   process.env.NEXT_PUBLIC_API_UPLOAD_TIMEOUT_MS || 180000,

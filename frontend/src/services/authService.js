@@ -227,7 +227,7 @@ const purgeInvalidStoredToken = () => {
   return null;
 };
 
-const SIMPLE_AUTH_TIMEOUT_MS = Number(process.env.NEXT_PUBLIC_API_TIMEOUT_MS || 20000);
+const SIMPLE_AUTH_TIMEOUT_MS = Number(process.env.NEXT_PUBLIC_API_TIMEOUT_MS || 60000);
 const SIMPLE_AUTH_MAX_RETRIES = 1;
 
 const makeRequest = async (url, method = 'GET', data = null, attempt = 0) => {
