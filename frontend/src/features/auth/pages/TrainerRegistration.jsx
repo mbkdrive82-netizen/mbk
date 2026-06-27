@@ -324,6 +324,7 @@ const Step1 = ({ onComplete, onExistingStatusChange }) => {
             checkResponse.message ||
             "Your registration is under review by Super Admin. You will receive approval soon.",
         });
+        setLoading(false);
         return;
       }
 
@@ -336,6 +337,7 @@ const Step1 = ({ onComplete, onExistingStatusChange }) => {
             checkResponse.message ||
             "Your trainer account is already approved. Please login to access dashboard.",
         });
+        setLoading(false);
         return;
       }
 
@@ -355,7 +357,10 @@ const Step1 = ({ onComplete, onExistingStatusChange }) => {
         setNotice(`Verification code: ${initResult.debugOtp} (displayed due to email timeout)`);
         notify.success(`Verification code generated: ${initResult.debugOtp}`);
       } else {
-        notify.success("Verification code sent to your email.");
+        setNotice(
+          "We sent a 6-digit code to your email. It may take up to a minute to arrive.",
+        );
+        notify.success("Verification code sent. Check your inbox.");
       }
     } catch (err) {
       const message = err.message || "Failed to send OTP. Please try again.";

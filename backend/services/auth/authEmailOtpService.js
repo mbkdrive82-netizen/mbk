@@ -96,27 +96,23 @@ const sendEmailOtp = async ({
       '[AUTH-OTP] ALLOW_OTP_DEBUG=1 enabled — returning debug OTP without SMTP send',
     );
   } else {
-    try {
-      const sendResult = await sendRegistrationOTP(normalizedEmail, recipientName, rawOtp);
-      if (!sendResult.success) {
-        const err = new Error(
-          sendResult.error ||
-            "Unable to send verification email. Please try again in a moment.",
+    // OTP is already persisted — send email in the background so the API
+    // responds quickly and the signup UI can open the OTP step immediately.
+    void sendRegistrationOTP(normalizedEmail, recipientName, rawOtp)
+      .then((sendResult) => {
+        if (!sendResult?.success) {
+          console.error(
+            "[AUTH-OTP] Background registration email failed:",
+            sendResult?.error || "unknown error",
+          );
+        }
+      })
+      .catch((emailError) => {
+        console.error(
+          "[AUTH-OTP] Background registration email error:",
+          emailError?.message || emailError,
         );
-        err.statusCode = 503;
-        throw err;
-      }
-    } catch (emailError) {
-      if (emailError.statusCode) {
-        throw emailError;
-      }
-      const err = new Error(
-        emailError?.message ||
-          "Unable to send verification email. Please try again in a moment.",
-      );
-      err.statusCode = 503;
-      throw err;
-    }
+      });
   }
 
   const result = {

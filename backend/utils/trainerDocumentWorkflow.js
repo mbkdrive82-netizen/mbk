@@ -261,6 +261,10 @@ const resolveTrainerRegistrationStatus = (trainer = {}, summary = null) => {
 };
 
 const resolveTrainerResumeStep = (trainer = {}, summary = null) => {
+  if (!trainer?.emailVerified) {
+    return 1;
+  }
+
   const workflowSummary = summary || evaluateTrainerDocumentWorkflow(trainer);
   const currentStep = Math.max(Number(trainer?.registrationStep || 1), 1);
   const hasPersonalDetails = hasCompletedTrainerDetails(trainer);
