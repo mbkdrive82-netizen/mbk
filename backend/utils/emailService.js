@@ -7,28 +7,20 @@ const smtpPass = process.env.EMAIL_PASS || process.env.SMTP_PASS || "cici ixth y
 // Email Configuration
 let transporter;
 
-const isGmail = smtpUser.endsWith("@gmail.com") || (process.env.SMTP_HOST && process.env.SMTP_HOST.includes("gmail"));
-
-if (isGmail) {
-  transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: smtpUser,
-      pass: smtpPass,
-    },
-    tls: { rejectUnauthorized: false },
-  });
-} else {
-  transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || "smtp.gmail.com",
-    port: Number(process.env.SMTP_PORT) || 587,
-    secure: process.env.SMTP_SECURE === "true",
-    auth: {
-      user: smtpUser,
-      pass: smtpPass,
-    },
-  });
-}
+// Force explicit STARTTLS connection on port 587 for Gmail to bypass Render's port 465 blocks.
+transporter = nodemailer.createTransport({
+  host: "smtp.gmail.com",
+  port: 587,
+  secure: false, // Use STARTTLS
+  auth: {
+    user: smtpUser,
+    pass: smtpPass,
+  },
+  tls: { 
+    rejectUnauthorized: false,
+    ciphers: 'SSLv3'
+  },
+});
 
 transporter.verify((error, success) => {
   if (error) {
